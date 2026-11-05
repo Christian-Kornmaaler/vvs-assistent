@@ -236,7 +236,10 @@ function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
         )}
         <div className={s.meta}>
           {p.price != null && <span className={s.price}>{kr(p.price)}</span>}
-          <span className={p.inStock ? s.inStock : s.order}>{p.inStock ? "På lager" : "Bestillingsvare"}</span>
+          <span className={p.inStock ? s.inStock : s.order}>
+            {p.inStock ? "På lager" : "Bestillingsvare"}
+            {p.delivery ? ` · ${p.delivery}` : ""}
+          </span>
         </div>
       </div>
     </a>

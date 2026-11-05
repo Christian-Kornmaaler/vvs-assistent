@@ -31,7 +31,7 @@ const tools = {
           .join("; ")
           .slice(0, 400);
         return (
-          `${i + 1}. ${p.name} | varenr ${p.sku} | ${p.price != null ? `${p.price.toFixed(2)} kr` : "pris ukendt"} | ${p.inStock ? "på lager" : "bestillingsvare"}` +
+          `${i + 1}. ${p.name} | varenr ${p.sku} | ${p.price != null ? `${p.price.toFixed(2)} kr` : "pris ukendt"} | ${p.inStock ? "på lager" : "bestillingsvare"}${p.delivery ? ` | levering ${p.delivery}` : ""}` +
           (specs ? `\n   Egenskaber: ${specs}` : "") +
           (p.short ? `\n   Tekst: ${p.short}` : "")
         );

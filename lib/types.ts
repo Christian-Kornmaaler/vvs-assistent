@@ -12,6 +12,10 @@ export type Product = {
   inStock: boolean;
   /** Samlet lager på tværs af kilder, hvis kendt */
   qty: number | null;
+  /** Forventet leveringstid: 1-2 hverdage for lagervarer, ellers produktets egen angivelse */
+  delivery?: string | null;
+  /** Leveringstid fra Magento-attributten (gælder kun når varen ikke er på lager) */
+  orderDelivery?: string | null;
   /** Tekniske egenskaber (dimension, gevind, materiale …) */
   specs?: Spec[];
 };

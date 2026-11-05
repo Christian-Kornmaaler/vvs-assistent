@@ -37,8 +37,11 @@ export const SPEC_ATTRIBUTES: { code: string; label: string; card?: boolean }[] 
   { code: "specification_length", label: "Længde" },
   { code: "key_width", label: "Nøglevidde" },
   { code: "ahl_protectionclassip", label: "IP-klasse" },
-  { code: "expected_delivery_time", label: "Forventet levering" },
 ];
+
+/** Leveringstid for varer der IKKE er på lager (option-attribut). Lagervarer: STOCK_DELIVERY. */
+export const DELIVERY_ATTRIBUTE = "expected_delivery_time";
+export const STOCK_DELIVERY = "1-2 hverdage";
 
 /** Tekst-attributter (ingen options) der også er nyttige for AI'en. */
 export const TEXT_ATTRIBUTES: { code: string; label: string }[] = [

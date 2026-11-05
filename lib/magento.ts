@@ -1,5 +1,5 @@
 import { oauthHeader, percentEncode } from "./oauth";
-import { isJunkValue, SPEC_ATTRIBUTES, TEXT_ATTRIBUTES } from "./specs";
+import { DELIVERY_ATTRIBUTE, isJunkValue, SPEC_ATTRIBUTES, STOCK_DELIVERY, TEXT_ATTRIBUTES } from "./specs";
 import type { Product, Spec } from "./types";
 
 /**
@@ -154,7 +154,7 @@ function getOptionLabels(): Promise<Map<string, Map<string, string>>> {
       "/products/attributes",
       {
         "searchCriteria[filterGroups][0][filters][0][field]": "attribute_code",
-        "searchCriteria[filterGroups][0][filters][0][value]": SPEC_ATTRIBUTES.map((a) => a.code).join(","),
+        "searchCriteria[filterGroups][0][filters][0][value]": [...SPEC_ATTRIBUTES.map((a) => a.code), DELIVERY_ATTRIBUTE].join(","),
         "searchCriteria[filterGroups][0][filters][0][condition_type]": "in",
         "searchCriteria[pageSize]": 100,
         fields: "items[attribute_code,options[label,value]]",
@@ -170,6 +170,13 @@ function getOptionLabels(): Promise<Map<string, Map<string, string>>> {
   labelCache = { at: Date.now(), promise };
   promise.catch(() => (labelCache = null)); // prøv igen næste gang ved fejl
   return promise;
+}
+
+function readOption(p: MagentoProduct, code: string, labels: Map<string, Map<string, string>>): string | null {
+  const raw = p.custom_attributes?.find((x) => x.attribute_code === code)?.value;
+  if (raw == null || raw === "") return null;
+  const label = labels.get(code)?.get(String(raw).trim());
+  return label && !isJunkValue(label) ? label : null;
 }
 
 function readSpecs(p: MagentoProduct, labels: Map<string, Map<string, string>>): Spec[] {
@@ -325,6 +332,7 @@ export async function magentoSearch(
         inStock: Boolean(stock?.is_in_stock && (stock.qty ?? 0) > 0),
         qty: typeof stock?.qty === "number" ? stock.qty : null,
         specs: readSpecs(p, labels),
+        orderDelivery: readOption(p, DELIVERY_ATTRIBUTE, labels),
       };
     })
     .filter((p): p is Product & { rank: number } => p !== null);
@@ -377,6 +385,9 @@ export async function magentoSearch(
       p.inStock = false;
     }
   }
+  // Leveringstid: lagervarer 1-2 hverdage; ellers produktets egen angivelse (hvis den findes).
+  // Ukendt lager (qty null) = ingen leveringstid, så vi aldrig lover noget forkert.
+  for (const p of products) p.delivery = p.qty == null ? null : p.inStock ? STOCK_DELIVERY : p.orderDelivery || null;
   sort();
   lap("salable");
 
