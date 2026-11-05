@@ -32,16 +32,24 @@ export default function Assistant() {
   const busy = status === "submitted" || status === "streaming";
 
   // Seneste søgning (afsluttet eller i gang) styrer produktkolonnen.
+  // AI'en kan prøve flere søgninger i ét svar; vis den sidste, der faktisk fandt noget.
+  // Fandt ingen af svarets søgninger noget, vises den tomme (så kunden ikke ser forældede varer).
   const { latest, latestKey, pendingQuery } = useMemo(() => {
     let latest: SearchResult | null = null;
     let latestKey = "";
     let pendingQuery: string | null = null;
     for (const m of messages) {
+      let turnBest: { r: SearchResult; key: string } | null = null;
+      let turnLast: { r: SearchResult; key: string } | null = null;
       for (const p of m.parts) {
         if (p.type !== "tool-search_products") continue;
         if (p.state === "output-available") {
-          latest = p.output as SearchResult;
-          latestKey = p.toolCallId;
+          const r = p.output as SearchResult;
+          turnLast = { r, key: p.toolCallId };
+          if (r.products?.length) turnBest = { r, key: p.toolCallId };
+          const pick = turnBest || turnLast;
+          latest = pick.r;
+          latestKey = pick.key;
           pendingQuery = null;
         } else if (p.state === "input-available" || p.state === "input-streaming") {
           pendingQuery = (p.input as { query?: string } | undefined)?.query ?? "";
