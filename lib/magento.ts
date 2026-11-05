@@ -103,6 +103,44 @@ export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: 
   }
 }
 
+// ---------- Præcisions-sortering ----------
+
+const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[”"″'’]+/g, " ")
+    .replace(/(\d)\.(\d\/\d)/g, "$1 $2") // 1.1/4 -> 1 1/4
+    .replace(/(\d)\s*mm\b/g, "$1mm")
+    .replace(/\s+/g, " ");
+
+/**
+ * Point pr. produkt: dimensioner (3/4, 1 1/4, 22mm, dn20) tæller meget, og et forkert
+ * dimensionsmatch trækker ned. Almindelige ord giver et lille plus. Hele tal i grupper,
+ * så "3/4" ikke matcher "1 3/4".
+ */
+function matchScorer(query: string) {
+  const q = norm(query);
+  const dims = [...q.matchAll(/(?:\b\d+ )?\b\d+\/\d+\b|\b\d+mm\b|\bdn ?\d+\b/g)].map((m) => m[0].replace(/^dn /, "dn"));
+  const words = q
+    .replace(/(?:\b\d+ )?\b\d+\/\d+\b|\b\d+mm\b|\bdn ?\d+\b/g, " ")
+    .split(/[\s,.;:()]+/)
+    .filter((w) => w.length > 2);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const dimRe = dims.map((d) => new RegExp(`(?<![\\d/])(?<!\\d )${esc(d)}(?![\\d/])`));
+
+  return (p: Product): number => {
+    const hay = norm(`${p.name} ${(p.specs || []).map((s) => s.value).join(" ")}`);
+    let score = 0;
+    if (dims.length) {
+      const hits = dimRe.filter((re) => re.test(hay)).length;
+      // Har produktet en anden tomme-dimension og ingen af de søgte, er det sandsynligvis forkert.
+      score += hits * 3 - (hits === 0 && /\b\d+\/\d+\b/.test(hay) ? 2 : 0);
+    }
+    for (const w of words) if (hay.includes(w)) score += 1;
+    return score;
+  };
+}
+
 // ---------- Tekniske attributter ----------
 
 const LABEL_TTL_MS = 6 * 60 * 60 * 1000;
@@ -291,9 +329,15 @@ export async function magentoSearch(
     })
     .filter((p): p is Product & { rank: number } => p !== null);
 
+  // Ekstra præcision: Magentos søgning skelner dårligt mellem fx 3/4" og 1/4".
+  // Produkter der matcher kundens dimensioner og ord (i navn eller egenskaber) rykkes frem.
+  const match = matchScorer(query);
+  const scores = new Map(products.map((p) => [p.sku, match(p)]));
   const sort = () =>
     products.sort(
-      (a, b) => a.rank + (a.inStock ? 0 : OUT_OF_STOCK_PENALTY) - (b.rank + (b.inStock ? 0 : OUT_OF_STOCK_PENALTY)),
+      (a, b) =>
+        (scores.get(b.sku) || 0) - (scores.get(a.sku) || 0) ||
+        a.rank + (a.inStock ? 0 : OUT_OF_STOCK_PENALTY) - (b.rank + (b.inStock ? 0 : OUT_OF_STOCK_PENALTY)),
     );
   sort();
 
