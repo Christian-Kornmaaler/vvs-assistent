@@ -27,6 +27,9 @@ export type SearchResult = {
   /** Hvis søgningen gav 0, den alternative formulering der blev brugt i stedet */
   usedQuery?: string;
   total: number;
+  /** Sidenummer (40 pr. side) og om der kan hentes flere ved scroll */
+  page?: number;
+  hasMore?: boolean;
   products: Product[];
   ms: number;
   source: "magento" | "demo";

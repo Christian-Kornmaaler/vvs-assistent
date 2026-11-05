@@ -13,7 +13,7 @@ export const tools = {
     }),
     execute: async ({ query }) => {
       try {
-        return await searchProducts(query, 8);
+        return await searchProducts(query);
       } catch (e) {
         console.error("search_products fejl:", (e as Error).message);
         return { query, total: 0, products: [], ms: 0, source: "magento" as const, error: (e as Error).message };
@@ -29,7 +29,8 @@ export const tools = {
             "Søgningen virkede ikke lige nu (midlertidig fejl). Prøv søgningen én gang til; virker den stadig ikke, så bed kunden prøve igen om lidt eller bruge shoppens søgefelt. Nævn ingen tekniske detaljer.",
         };
       if (output.products.length === 0) return { type: "text", value: `Ingen resultater for "${output.query}".` };
-      const lines = output.products.map((p, i) => {
+      // Kunden kan scrolle gennem alle resultater; AI'en får kun de 8 øverste (hurtigere).
+      const lines = output.products.slice(0, 8).map((p, i) => {
         const specs = (p.specs || [])
           .map((s) => `${s.label}: ${s.value}`)
           .join("; ")
@@ -44,7 +45,10 @@ export const tools = {
       const head = used
         ? `Ingen resultater for "${output.query}", så der blev søgt på "${used}" i stedet: ${output.total} resultater.`
         : `${output.total} resultater for "${output.query}".`;
-      return { type: "text", value: `${head} Viser kunden disse:\n${lines.join("\n")}` };
+      return {
+        type: "text",
+        value: `${head} Kunden ser alle resultater i en liste (lagervarer først, billigst øverst). De øverste er:\n${lines.join("\n")}`,
+      };
     },
   }),
 };

@@ -276,8 +276,12 @@ export function stripHtml(html: string, max = 180): string {
 
 export type Timings = { search: number; products: number; salable: number };
 
+export const PAGE_SIZE = CANDIDATES;
+
+/** Én side (40 kandidater) fra Magentos søgning, sorteret efter relevans, lager og pris. */
 export async function magentoSearch(
   query: string,
+  page = 1,
 ): Promise<{ total: number; products: Product[]; timings: Timings; debug?: Record<string, unknown> }> {
   const timings: Timings = { search: 0, products: 0, salable: 0 };
   let t = Date.now();
@@ -295,7 +299,7 @@ export async function magentoSearch(
     "searchCriteria[filterGroups][0][filters][0][field]": "search_term",
     "searchCriteria[filterGroups][0][filters][0][value]": query,
     "searchCriteria[pageSize]": CANDIDATES,
-    "searchCriteria[currentPage]": 1,
+    "searchCriteria[currentPage]": page,
   });
   lap("search");
   const ids = (search.items || []).map((i) => i.id);

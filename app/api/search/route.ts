@@ -12,8 +12,11 @@ export async function GET(req: Request) {
   if (q.length < 2) return Response.json({ ok: false, error: "Brug ?q=søgeord" });
 
   try {
-    const r = await searchProducts(q, 8);
-    return Response.json({ ok: true, ...r }, { headers: { "Cache-Control": "no-store" } });
+    const r = await searchProducts(q);
+    return Response.json(
+      { ok: true, ...r, shown: r.products.length, products: r.products.slice(0, 12) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (e) {
     const err = e as Error & { cause?: { code?: string; message?: string } };
     return Response.json(

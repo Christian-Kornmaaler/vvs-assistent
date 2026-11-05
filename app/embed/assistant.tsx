@@ -4,8 +4,9 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type InferUITools, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatTools } from "@/app/api/chat/route";
-import type { Product, SearchResult } from "@/lib/types";
+import type { SearchResult } from "@/lib/types";
 import s from "./assistant.module.css";
+import ProductList from "./product-list";
 
 type Msg = UIMessage<unknown, never, InferUITools<ChatTools>>;
 
@@ -16,8 +17,6 @@ const SUGGESTIONS = [
   "Hvad tætner jeg gevind med?",
 ];
 
-const kr = (n: number) =>
-  n.toLocaleString("da-DK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr.";
 
 function close() {
   window.parent?.postMessage({ type: "vvs-assistent:close" }, "*");
@@ -33,21 +32,23 @@ export default function Assistant() {
   const busy = status === "submitted" || status === "streaming";
 
   // Seneste søgning (afsluttet eller i gang) styrer produktkolonnen.
-  const { latest, pendingQuery } = useMemo(() => {
+  const { latest, latestKey, pendingQuery } = useMemo(() => {
     let latest: SearchResult | null = null;
+    let latestKey = "";
     let pendingQuery: string | null = null;
     for (const m of messages) {
       for (const p of m.parts) {
         if (p.type !== "tool-search_products") continue;
         if (p.state === "output-available") {
           latest = p.output as SearchResult;
+          latestKey = p.toolCallId;
           pendingQuery = null;
         } else if (p.state === "input-available" || p.state === "input-streaming") {
           pendingQuery = (p.input as { query?: string } | undefined)?.query ?? "";
         }
       }
     }
-    return { latest, pendingQuery };
+    return { latest, latestKey, pendingQuery };
   }, [messages]);
 
   useEffect(() => {
@@ -187,67 +188,26 @@ export default function Assistant() {
 
         {showProducts && (
           <aside className={s.products} aria-label="Fundne produkter">
-            <div className={s.productsHead}>
-              {pendingQuery !== null ? (
-                <span>
-                  Søger efter <b>{pendingQuery || "…"}</b>
-                </span>
-              ) : latest ? (
-                <span>
-                  <b>{latest.total}</b> resultater · lagervarer først, billigst øverst
-                </span>
-              ) : null}
-              {latest?.source === "demo" && <span className={s.demo}>Demo-data</span>}
-            </div>
-            <div className={s.productList}>
-              {pendingQuery !== null && !latest
-                ? Array.from({ length: 4 }).map((_, i) => <div key={i} className={s.skeleton} />)
-                : latest?.products.map((p) => <ProductCard key={p.sku} p={p} dim={pendingQuery !== null} />)}
-              {pendingQuery === null && latest && latest.products.length === 0 && (
-                <p className={s.empty}>Ingen produkter matchede. Prøv at beskrive det på en anden måde.</p>
-              )}
-            </div>
+            {latest ? (
+              <ProductList key={latestKey} result={latest} dim={pendingQuery !== null} />
+            ) : (
+              <>
+                <div className={s.productsHead}>
+                  <span>
+                    Søger efter <b>{pendingQuery || "…"}</b>
+                  </span>
+                </div>
+                <div className={s.productList}>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className={s.skeleton} />
+                  ))}
+                </div>
+              </>
+            )}
           </aside>
         )}
       </div>
     </div>
-  );
-}
-
-function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
-  return (
-    <a className={`${s.card} ${dim ? s.dim : ""}`} href={p.url} target="_top" rel="noopener">
-      <div className={s.thumb}>
-        {p.image ? <img src={p.image} alt="" loading="lazy" /> : <BoxIcon />}
-      </div>
-      <div className={s.cardBody}>
-        <div className={s.name}>{p.name}</div>
-        {p.specs?.some((x) => x.card) ? (
-          <div className={s.specs}>
-            {p.specs
-              .filter((x) => x.card)
-              .slice(0, 3)
-              .map((x) => (
-                <span key={x.label} title={x.label}>
-                  {x.value}
-                </span>
-              ))}
-          </div>
-        ) : (
-          p.short &&
-          !p.short.toLowerCase().startsWith(p.name.toLowerCase().slice(0, 25)) && (
-            <div className={s.short}>{p.short}</div>
-          )
-        )}
-        <div className={s.meta}>
-          {p.price != null && <span className={s.price}>{kr(p.price)}</span>}
-          <span className={p.inStock ? s.inStock : s.order}>
-            {p.inStock ? "På lager" : "Bestillingsvare"}
-            {p.delivery ? ` · ${p.delivery}` : ""}
-          </span>
-        </div>
-      </div>
-    </a>
   );
 }
 
@@ -278,14 +238,6 @@ function StopIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
       <rect x="5" y="5" width="14" height="14" />
-    </svg>
-  );
-}
-function BoxIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
-      <path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z" />
-      <path d="M3 7.5 12 12l9-4.5M12 12v9" />
     </svg>
   );
 }
