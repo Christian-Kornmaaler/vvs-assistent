@@ -25,10 +25,17 @@ const tools = {
     toModelOutput: ({ output }) => {
       if ("error" in output && output.error) return { type: "text", value: `Søgefejl: ${output.error}` };
       if (output.products.length === 0) return { type: "text", value: `Ingen resultater for "${output.query}".` };
-      const lines = output.products.map(
-        (p, i) =>
-          `${i + 1}. ${p.name} | varenr ${p.sku} | ${p.price != null ? `${p.price.toFixed(2)} kr` : "pris ukendt"} | ${p.inStock ? "på lager" : "bestillingsvare"}${p.short ? ` | ${p.short}` : ""}`,
-      );
+      const lines = output.products.map((p, i) => {
+        const specs = (p.specs || [])
+          .map((s) => `${s.label}: ${s.value}`)
+          .join("; ")
+          .slice(0, 400);
+        return (
+          `${i + 1}. ${p.name} | varenr ${p.sku} | ${p.price != null ? `${p.price.toFixed(2)} kr` : "pris ukendt"} | ${p.inStock ? "på lager" : "bestillingsvare"}` +
+          (specs ? `\n   Egenskaber: ${specs}` : "") +
+          (p.short ? `\n   Tekst: ${p.short}` : "")
+        );
+      });
       return {
         type: "text",
         value: `${output.total} resultater for "${output.query}". Viser kunden disse:\n${lines.join("\n")}`,

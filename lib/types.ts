@@ -10,9 +10,13 @@ export type Product = {
   short: string;
   /** Kan sælges fra lager nu (salable qty > 0) */
   inStock: boolean;
-  /** Salable qty hvis kendt */
+  /** Samlet lager på tværs af kilder, hvis kendt */
   qty: number | null;
+  /** Tekniske egenskaber (dimension, gevind, materiale …) */
+  specs?: Spec[];
 };
+
+export type Spec = { label: string; value: string; card: boolean };
 
 export type SearchResult = {
   query: string;

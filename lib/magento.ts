@@ -1,5 +1,6 @@
 import { oauthHeader, percentEncode } from "./oauth";
-import type { Product } from "./types";
+import { isJunkValue, SPEC_ATTRIBUTES, TEXT_ATTRIBUTES } from "./specs";
+import type { Product, Spec } from "./types";
 
 /**
  * Produktsøgning direkte mod Magento 2 (prototype-fase).
@@ -102,6 +103,57 @@ export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: 
   }
 }
 
+// ---------- Tekniske attributter ----------
+
+const LABEL_TTL_MS = 6 * 60 * 60 * 1000;
+let labelCache: { at: number; promise: Promise<Map<string, Map<string, string>>> } | null = null;
+
+/** option-id -> label for de udvalgte select-attributter. Hentes én gang pr. server-instans. */
+function getOptionLabels(): Promise<Map<string, Map<string, string>>> {
+  if (labelCache && Date.now() - labelCache.at < LABEL_TTL_MS) return labelCache.promise;
+  const promise = (async () => {
+    const res = await mget<{ items?: { attribute_code: string; options?: { label: string; value: string }[] }[] }>(
+      "/products/attributes",
+      {
+        "searchCriteria[filterGroups][0][filters][0][field]": "attribute_code",
+        "searchCriteria[filterGroups][0][filters][0][value]": SPEC_ATTRIBUTES.map((a) => a.code).join(","),
+        "searchCriteria[filterGroups][0][filters][0][condition_type]": "in",
+        "searchCriteria[pageSize]": 100,
+        fields: "items[attribute_code,options[label,value]]",
+      },
+      8000,
+    );
+    const map = new Map<string, Map<string, string>>();
+    for (const a of res.items || []) {
+      map.set(a.attribute_code, new Map((a.options || []).map((o) => [String(o.value), o.label])));
+    }
+    return map;
+  })();
+  labelCache = { at: Date.now(), promise };
+  promise.catch(() => (labelCache = null)); // prøv igen næste gang ved fejl
+  return promise;
+}
+
+function readSpecs(p: MagentoProduct, labels: Map<string, Map<string, string>>): Spec[] {
+  const out: Spec[] = [];
+  for (const a of SPEC_ATTRIBUTES) {
+    const raw = p.custom_attributes?.find((x) => x.attribute_code === a.code)?.value;
+    if (raw == null || raw === "") continue;
+    const opts = labels.get(a.code);
+    const value = String(raw)
+      .split(",")
+      .map((id) => opts?.get(id.trim()) ?? (opts ? "" : id.trim()))
+      .filter((v) => v && !isJunkValue(v))
+      .join(", ");
+    if (value) out.push({ label: a.label, value, card: Boolean(a.card) });
+  }
+  for (const a of TEXT_ATTRIBUTES) {
+    const raw = attr(p, a.code);
+    if (raw && !isJunkValue(raw)) out.push({ label: a.label, value: stripHtml(raw, 140), card: false });
+  }
+  return out;
+}
+
 type MagentoAttribute = {
   attribute_code: string;
   default_frontend_label?: string;
@@ -185,6 +237,9 @@ export async function magentoSearch(
     t = Date.now();
   };
 
+  // Option-labels til attributterne hentes parallelt (caches i hukommelsen).
+  const labelsPromise = getOptionLabels().catch(() => new Map<string, Map<string, string>>());
+
   // 1. Relevans-søgning i Magentos søgeindeks
   const search = await mget<SearchResponse>("/search", {
     "searchCriteria[requestName]": "quick_search_container",
@@ -207,12 +262,13 @@ export async function magentoSearch(
     "searchCriteria[pageSize]": CANDIDATES,
     fields,
   });
+  const labels = await labelsPromise;
   lap("products");
   const byId = new Map((list.items || []).map((p) => [p.id, p]));
 
   const vat = cfg.pricesInclVat ? 1 : 1.25;
   let products: (Product & { rank: number })[] = ids
-    .map((id, rank) => {
+    .map((id, rank): (Product & { rank: number }) | null => {
       const p = byId.get(id);
       if (!p) return null;
       const image = attr(p, "small_image") || attr(p, "image") || attr(p, "thumbnail");
@@ -230,6 +286,7 @@ export async function magentoSearch(
         short: stripHtml(text),
         inStock: Boolean(stock?.is_in_stock && (stock.qty ?? 0) > 0),
         qty: typeof stock?.qty === "number" ? stock.qty : null,
+        specs: readSpecs(p, labels),
       };
     })
     .filter((p): p is Product & { rank: number } => p !== null);
@@ -243,7 +300,7 @@ export async function magentoSearch(
   // 3. Lager fra MSI source-items (én pr. leverandør-kilde) – ét samlet kald for alle kandidater.
   //    Lagervare = mindst én aktiv kilde (status 1) med antal > 0.
   //    Ingen source-item for en SKU = ingen kilde fører varen (ikke en fejl).
-  const debug: Record<string, unknown> = {};
+  const debug: Record<string, unknown> = { labelAttributes: labels.size };
   try {
     const skus = products.map((p) => p.sku);
     const src = await mget<{ items?: SourceItem[] }>(

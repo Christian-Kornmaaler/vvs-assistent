@@ -220,7 +220,20 @@ function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
       </div>
       <div className={s.cardBody}>
         <div className={s.name}>{p.name}</div>
-        {p.short && <div className={s.short}>{p.short}</div>}
+        {p.specs?.some((x) => x.card) ? (
+          <div className={s.specs}>
+            {p.specs
+              .filter((x) => x.card)
+              .slice(0, 3)
+              .map((x) => (
+                <span key={x.label} title={x.label}>
+                  {x.value}
+                </span>
+              ))}
+          </div>
+        ) : (
+          p.short && <div className={s.short}>{p.short}</div>
+        )}
         <div className={s.meta}>
           {p.price != null && <span className={s.price}>{kr(p.price)}</span>}
           <span className={p.inStock ? s.inStock : s.order}>{p.inStock ? "På lager" : "Bestillingsvare"}</span>
