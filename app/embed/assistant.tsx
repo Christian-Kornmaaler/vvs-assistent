@@ -124,16 +124,25 @@ export default function Assistant() {
                     );
                   }
                   if (p.type === "tool-suggest_replies") {
-                    // Kun forslagene under det seneste svar er klikbare.
-                    const opts = (p.input as { options?: string[] } | undefined)?.options || [];
-                    if (m.id !== messages.at(-1)?.id || !opts.length) return null;
+                    // Svaret står i værktøjets "reply" (streames løbende); forslagene er kun
+                    // klikbare under det seneste svar. Har modellen også skrevet almindelig
+                    // tekst i samme svar, vises "reply" ikke en gang til.
+                    const inp = (p.input || {}) as { reply?: string; options?: string[] };
+                    const hasText = m.parts.some((x) => x.type === "text" && x.text.trim());
+                    const opts = (inp.options || []).filter((o) => typeof o === "string" && o.trim());
+                    const isLast = m.id === messages.at(-1)?.id;
                     return (
-                      <div key={i} className={s.replyChips}>
-                        {opts.map((o) => (
-                          <button key={o} className={s.chip} disabled={busy} onClick={() => send(o)}>
-                            {o}
-                          </button>
-                        ))}
+                      <div key={i} className={s.replyGroup}>
+                        {inp.reply && !hasText && <div className={s.botBubble}>{inp.reply}</div>}
+                        {isLast && opts.length > 0 && p.state !== "input-streaming" && (
+                          <div className={s.replyChips}>
+                            {opts.map((o) => (
+                              <button key={o} className={s.chip} disabled={busy} onClick={() => send(o)}>
+                                {o}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   }

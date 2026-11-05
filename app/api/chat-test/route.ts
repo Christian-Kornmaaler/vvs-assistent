@@ -27,6 +27,7 @@ export async function GET(req: Request) {
         ms: Date.now() - t0,
         finishReason: r.finishReason,
         text: r.text,
+        reply: r.steps.flatMap((st) => st.toolCalls).map((c) => (c.input as { reply?: string }).reply).filter(Boolean).at(-1) ?? null,
         steps: r.steps.map((s) => ({
           finishReason: s.finishReason,
           toolCalls: s.toolCalls.map((c) => c.input),

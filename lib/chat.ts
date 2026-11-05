@@ -54,8 +54,13 @@ export const tools = {
 
   suggest_replies: tool({
     description:
-      "Vis 2-5 klikbare svarforslag til kunden under dit svar. Kald den som det sidste i hvert svar, efter din tekst.",
+      "Giv kunden dit svar og 2-5 klikbare svarforslag. Kald den som det sidste i HVERT svar. Skriv dit svar i 'reply' (ikke som almindelig tekst).",
     inputSchema: z.object({
+      reply: z
+        .string()
+        .min(1)
+        .max(600)
+        .describe("Dit svar til kunden, 1-3 korte sætninger på dansk"),
       options: z
         .array(z.string().min(1).max(40))
         .min(2)
@@ -63,7 +68,7 @@ export const tools = {
         .describe("Korte forslag (1-4 ord) som kunden kan klikke på i stedet for at skrive, fx 'Torx', 'Pozidriv', 'Skruetrækkersæt'"),
     }),
     execute: async ({ options }) => ({ options }),
-    toModelOutput: () => ({ type: "text", value: "Forslagene vises for kunden." }),
+    toModelOutput: () => ({ type: "text", value: "Svaret og forslagene vises for kunden." }),
   }),
 };
 
