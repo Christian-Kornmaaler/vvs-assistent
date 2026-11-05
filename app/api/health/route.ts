@@ -1,10 +1,11 @@
+import { debugAllowed } from "@/lib/debug";
 import { aiConfigured, getModel } from "@/lib/model";
 import { magentoConfigured, magentoInfo, magentoPing } from "@/lib/magento";
 
 // Viser opsætning uden at afsløre nøgler. ?ping=1 tester også forbindelsen til Magento.
 export async function GET(req: Request) {
   const { provider, id } = getModel();
-  const ping = new URL(req.url).searchParams.has("ping");
+  const ping = new URL(req.url).searchParams.has("ping") && debugAllowed(req);
   return Response.json(
     {
       ai: aiConfigured() ? { provider, model: id } : "mangler nøgle",

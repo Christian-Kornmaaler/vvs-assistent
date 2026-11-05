@@ -1,3 +1,4 @@
+import { debugAllowed, notFound } from "@/lib/debug";
 import { generateText } from "ai";
 import { chatSettings } from "@/lib/chat";
 import { getModel } from "@/lib/model";
@@ -7,6 +8,7 @@ export const maxDuration = 30;
 
 // Fejlsøgning: kører én hel dialog-tur på serveren. /api/chat-test?q=jeg+skal+bruge+en+kuglehane
 export async function GET(req: Request) {
+  if (!debugAllowed(req)) return notFound();
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "ukendt";
   if (rateLimited(ip)) return new Response("For mange forespørgsler.", { status: 429 });
   const params = new URL(req.url).searchParams;

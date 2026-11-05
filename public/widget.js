@@ -2,14 +2,31 @@
  * vvsfittings.dk produktassistent – indlejringsscript
  * Brug: <script src="https://<assistent-domæne>/widget.js" defer></script>
  * Valgfrit: data-color="#218ec5" data-label="Find produkt"
+ *
+ * TESTTILSTAND (standard): knappen vises KUN for dem, der har åbnet en side på shoppen
+ * med ?assistent=1 i adressen (huskes i browseren). ?assistent=0 slår den fra igen.
+ * Når assistenten skal vises for alle kunder: tilføj data-public="true" på script-tagget.
  */
 (function () {
   if (window.__vvsAssistent) return;
-  window.__vvsAssistent = true;
 
   var script =
     document.currentScript ||
     document.querySelector('script[src*="widget.js"]');
+  if (!script) return;
+
+  // Testtilstand
+  if (script.getAttribute("data-public") !== "true") {
+    var flag = null;
+    try {
+      var param = new URLSearchParams(location.search).get("assistent");
+      if (param === "1") localStorage.setItem("vvs-assistent", "1");
+      if (param === "0") localStorage.removeItem("vvs-assistent");
+      flag = localStorage.getItem("vvs-assistent");
+    } catch (e) {}
+    if (flag !== "1") return;
+  }
+  window.__vvsAssistent = true;
   var origin = new URL(script.src).origin;
   var color = script.getAttribute("data-color") || "#218ec5";
   var label = script.getAttribute("data-label") || "Find produkt";
