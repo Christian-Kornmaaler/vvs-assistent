@@ -127,7 +127,8 @@ function matchScorer(query: string) {
     .split(/[\s,.;:()]+/)
     .filter((w) => w.length > 2);
   const head = headWord(query);
-  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wantsAccessory = ACCESSORY_WORDS.test(q);
+  const esc =(s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const dimRe = dims.map((d) => new RegExp(`(?<![\\d/])(?<!\\d )${esc(d)}(?![\\d/])`));
 
   return (p: Product): number => {
@@ -143,9 +144,25 @@ function matchScorer(query: string) {
     if (head && norm(p.name).includes(head)) score += 3;
     // Alle søgeordene i navnet (fx både "skruetrækker" og "sæt") = det præcise produkt.
     if (words.length > 1 && words.every((w) => norm(p.name).includes(w))) score += 2;
+    // Tilbehør: "afdækning FOR stikkontakt", "spændehætte FOR kuglehane", "forskruningssæt TIL
+    // brusearmatur". Står hovedordet kun efter "for/til", er varen tilbehør til det, kunden søger,
+    // ikke selve varen – medmindre kunden selv søger på tilbehør.
+    if (head && !wantsAccessory) {
+      const n = norm(p.name);
+      const m = n.match(/\s(?:for|til)\s/);
+      if (m && m.index !== undefined) {
+        const before = n.slice(0, m.index);
+        const after = n.slice(m.index);
+        if (!before.includes(head) && after.includes(head)) score -= 5;
+      }
+    }
     return score;
   };
 }
+
+// Søger kunden selv efter tilbehør, skal tilbehør ikke straffes.
+const ACCESSORY_WORDS =
+  /\b(afdækning|ramme|dæksel|hætte|spændehætte|holder|beslag|pakning|reservedel|adapter|forskruning|forlænger|tangent|cover|kappe|indsats|patron|bit)\w*/;
 
 // ---------- Tekniske attributter ----------
 
@@ -355,8 +372,10 @@ export async function magentoSearch(
   // derefter bestillingsvarer billigst øverst. Svage match (fx tilbehør) kommer bagefter,
   // så en billig støvhætte ikke skubber selve produktet ned.
   const best = Math.max(0, ...scores.values());
+  // Relevans først: varer med samme relevans-point står sammen, og KUN inden for dem
+  // sorteres der på lager og pris. Uden genkendelige ord: Magentos øverste resultater først.
   const tier = (p: Product & { rank: number }) =>
-    (scores.get(p.sku) || 0) >= best - 1 && (best > 0 || p.rank < RELEVANT_TOP) ? 0 : 1;
+    best > 0 ? Math.max(0, best - (scores.get(p.sku) || 0)) : p.rank < RELEVANT_TOP ? 0 : 1;
   const price = (p: Product) => (p.price == null ? Number.POSITIVE_INFINITY : p.price);
   const sort = () =>
     products.sort(
