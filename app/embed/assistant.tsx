@@ -123,6 +123,20 @@ export default function Assistant() {
                       </div>
                     );
                   }
+                  if (p.type === "tool-suggest_replies") {
+                    // Kun forslagene under det seneste svar er klikbare.
+                    const opts = (p.input as { options?: string[] } | undefined)?.options || [];
+                    if (m.id !== messages.at(-1)?.id || !opts.length) return null;
+                    return (
+                      <div key={i} className={s.replyChips}>
+                        {opts.map((o) => (
+                          <button key={o} className={s.chip} disabled={busy} onClick={() => send(o)}>
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  }
                   if (p.type === "tool-search_products") {
                     const q = (p.input as { query?: string } | undefined)?.query;
                     const done = p.state === "output-available";

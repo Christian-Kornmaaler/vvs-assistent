@@ -1,4 +1,4 @@
-import { stepCountIs, tool, type ModelMessage } from "ai";
+import { hasToolCall, stepCountIs, tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { getModel } from "./model";
 import { INSTRUCTIONS } from "./prompt";
@@ -51,6 +51,20 @@ export const tools = {
       };
     },
   }),
+
+  suggest_replies: tool({
+    description:
+      "Vis 2-5 klikbare svarforslag til kunden under dit svar. Kald den som det sidste i hvert svar, efter din tekst.",
+    inputSchema: z.object({
+      options: z
+        .array(z.string().min(1).max(40))
+        .min(2)
+        .max(5)
+        .describe("Korte forslag (1-4 ord) som kunden kan klikke på i stedet for at skrive, fx 'Torx', 'Pozidriv', 'Skruetrækkersæt'"),
+    }),
+    execute: async ({ options }) => ({ options }),
+    toModelOutput: () => ({ type: "text", value: "Forslagene vises for kunden." }),
+  }),
 };
 
 export type ChatTools = typeof tools;
@@ -67,7 +81,8 @@ export function chatSettings(messages: ModelMessage[], effortOverride?: string) 
     instructions: INSTRUCTIONS,
     messages,
     tools,
-    stopWhen: stepCountIs(4),
+    // Stop når forslagene er vist (sparer en ekstra AI-runde), ellers efter 5 trin.
+    stopWhen: [hasToolCall("suggest_replies"), stepCountIs(5)],
     maxOutputTokens: 2500,
     providerOptions:
       provider === "openai"

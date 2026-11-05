@@ -494,3 +494,19 @@
     padding: 0 8px;
   }
 }
+
+/* Klikbare svarforslag under seneste svar */
+.replyChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 92%;
+  animation: fadeIn 0.25s ease-out;
+}
+.replyChips .chip {
+  padding: 6px 13px;
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
