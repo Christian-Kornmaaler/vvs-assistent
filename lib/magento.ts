@@ -1,4 +1,5 @@
 import { oauthHeader, percentEncode } from "./oauth";
+import { headWord } from "./query-variants";
 import { DELIVERY_ATTRIBUTE, isJunkValue, SPEC_ATTRIBUTES, STOCK_DELIVERY, TEXT_ATTRIBUTES } from "./specs";
 import type { Product, Spec } from "./types";
 
@@ -125,6 +126,7 @@ function matchScorer(query: string) {
     .replace(/(?:\b\d+ )?\b\d+\/\d+\b|\b\d+mm\b|\bdn ?\d+\b/g, " ")
     .split(/[\s,.;:()]+/)
     .filter((w) => w.length > 2);
+  const head = headWord(query);
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const dimRe = dims.map((d) => new RegExp(`(?<![\\d/])(?<!\\d )${esc(d)}(?![\\d/])`));
 
@@ -137,6 +139,8 @@ function matchScorer(query: string) {
       score += hits * 3 - (hits === 0 && /\b\d+\/\d+\b/.test(hay) ? 2 : 0);
     }
     for (const w of words) if (hay.includes(w)) score += 1;
+    // Hovedordet (fx "stophane") skal stå i navnet; det vejer mest af ordene.
+    if (head && norm(p.name).includes(head)) score += 3;
     return score;
   };
 }

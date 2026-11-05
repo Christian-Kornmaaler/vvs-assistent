@@ -34,6 +34,18 @@ function splitCompound(word: string): string[] | null {
   return null;
 }
 
+/** Søgningens hovedord (det vigtigste navneord), fx "stophane" i "vinkelstophane 1/2". */
+export function headWord(query: string): string | null {
+  const words = query.replace(DIM_RE, " ").split(/\s+/).filter(Boolean);
+  for (let i = words.length - 1; i >= 0; i--) {
+    const s = splitCompound(words[i]);
+    if (s) return s[1];
+    const w = words[i].toLowerCase();
+    if (HEADS.includes(w) || w.length >= 4) return w;
+  }
+  return null;
+}
+
 export function queryVariants(query: string): string[] {
   const q = query.trim().replace(/\s+/g, " ");
   const dims = q.match(DIM_RE) || [];

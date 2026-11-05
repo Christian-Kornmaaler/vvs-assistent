@@ -1,6 +1,6 @@
 import { demoSearch } from "./demo-catalog";
 import { magentoConfigured, magentoSearch } from "./magento";
-import { queryVariants } from "./query-variants";
+import { headWord, queryVariants } from "./query-variants";
 import type { Product, SearchResult } from "./types";
 
 // Kort cache i hukommelsen: samme søgning inden for 2 minutter svares med det samme.
@@ -23,16 +23,29 @@ export async function searchProducts(query: string, limit = 8): Promise<SearchRe
   let r = await run(query);
   let usedQuery = query;
 
-  // Ingen resultater: prøv varianter parallelt (sammensatte ord splittet, kun hovedord …)
-  // og brug den første i prioriteret rækkefølge, der giver noget.
+  // Ingen resultater: prøv varianter parallelt (sammensatte ord splittet, kun hovedord …).
+  // Vælg den variant, hvor flest af de viste produkter faktisk indeholder hovedordet
+  // (fx "stophane"), så "vinkel stophane" ikke vinder med en masse vinkelfittings.
   if (r.total === 0) {
     const variants = queryVariants(query);
+    const head = headWord(query);
     if (variants.length) {
       const results = await Promise.all(variants.map((v) => run(v).catch(() => null)));
-      const idx = results.findIndex((x) => x && x.total > 0);
-      if (idx >= 0) {
-        r = results[idx]!;
-        usedQuery = variants[idx];
+      let best = -1;
+      let bestScore = -1;
+      results.forEach((x, i) => {
+        if (!x || x.total === 0) return;
+        const hits = head
+          ? x.products.slice(0, limit).filter((p) => p.name.toLowerCase().includes(head)).length
+          : 0;
+        if (hits > bestScore) {
+          best = i;
+          bestScore = hits;
+        }
+      });
+      if (best >= 0) {
+        r = results[best]!;
+        usedQuery = variants[best];
       }
     }
   }
