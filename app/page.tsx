@@ -11,7 +11,7 @@ export default function TestPage() {
         <p className={s.kicker}>Testside</p>
         <h1>Produktassistent til vvsfittings.dk</h1>
         <p>
-          Klik på knappen <b>Find produkt</b> nederst til højre for at afprøve assistenten, som den vil se ud på
+          Klik på knappen <b>Find produkt</b> i højre side for at afprøve assistenten, som den vil se ud på
           shoppen.
         </p>
 

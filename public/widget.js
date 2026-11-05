@@ -39,19 +39,23 @@
   root.innerHTML =
     "<style>" +
     ":host{all:initial}" +
-    ".btn{position:fixed;right:20px;bottom:20px;display:flex;align-items:center;gap:10px;height:52px;padding:0 18px 0 16px;" +
-    "background:" + color + ";color:#fff;border:0;border-radius:999px;cursor:pointer;font:600 15px/1 Poppins,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;" +
-    "box-shadow:0 6px 20px rgba(10,40,80,.25);transition:transform .2s,opacity .2s}" +
-    ".btn:hover{transform:translateY(-2px)}" +
+    /* Lodret fane i højre kant, lidt under midten, så den ikke dækker "Læg i kurv" nederst på mobil */
+    ".btn{position:fixed;right:0;top:60%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:9px;" +
+    "padding:16px 10px 16px 11px;background:" + color + ";color:#fff;border:0;border-radius:12px 0 0 12px;cursor:pointer;" +
+    "font:600 14px/1 Poppins,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.02em;" +
+    "box-shadow:-3px 4px 16px rgba(10,40,80,.22);transition:transform .25s ease,padding .2s ease,opacity .2s ease}" +
+    ".btn span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}" +
     ".btn svg{flex:none}" +
-    ".open .btn{opacity:0;pointer-events:none;transform:translateY(8px)}" +
+    ".btn:hover{padding-left:15px}" +
+    ".btn:focus-visible{outline:3px solid #fff;outline-offset:-6px}" +
+    ".open .btn{transform:translate(110%,-50%);opacity:0;pointer-events:none}" +
     ".backdrop{position:fixed;inset:0;background:rgba(10,25,45,.28);opacity:0;pointer-events:none;transition:opacity .25s}" +
     ".open .backdrop{opacity:1;pointer-events:auto}" +
     ".panel{position:fixed;top:0;right:0;height:100%;width:min(860px,100vw);background:#f2f6f6;border-radius:16px 0 0 16px;overflow:hidden;" +
     "box-shadow:-10px 0 40px rgba(10,40,80,.2);transform:translateX(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);visibility:hidden}" +
     ".open .panel{transform:none;visibility:visible}" +
     ".panel iframe{border:0;width:100%;height:100%;display:block}" +
-    "@media (max-width:700px){.btn{right:14px;bottom:14px;height:52px;width:52px;padding:0;justify-content:center}.btn span{display:none}.panel{border-radius:0}}" +
+    "@media (max-width:700px){.btn{top:62%;gap:7px;padding:13px 8px 13px 9px;font-size:13px;border-radius:10px 0 0 10px}.btn svg{width:17px;height:17px}.panel{border-radius:0}}" +
     "@media (prefers-reduced-motion:reduce){.btn,.panel,.backdrop{transition:none}}" +
     "</style>" +
     '<div class="wrap">' +
