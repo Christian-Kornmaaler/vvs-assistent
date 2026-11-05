@@ -74,7 +74,18 @@ function qs(params: Record<string, string | number>): string {
     .join("&");
 }
 
-export async function magentoSearch(query: string): Promise<{ total: number; products: Product[] }> {
+export type Timings = { search: number; products: number; salable: number };
+
+export async function magentoSearch(
+  query: string,
+): Promise<{ total: number; products: Product[]; timings: Timings }> {
+  const timings: Timings = { search: 0, products: 0, salable: 0 };
+  let t = Date.now();
+  const lap = (k: keyof Timings) => {
+    timings[k] = Date.now() - t;
+    t = Date.now();
+  };
+
   // 1. Relevans-søgning i Magentos søgeindeks
   const search = await mget<SearchResponse>(
     `/V1/search?${qs({
@@ -85,8 +96,9 @@ export async function magentoSearch(query: string): Promise<{ total: number; pro
       "searchCriteria[currentPage]": 1,
     })}`,
   );
+  lap("search");
   const ids = (search.items || []).map((i) => i.id);
-  if (ids.length === 0) return { total: 0, products: [] };
+  if (ids.length === 0) return { total: 0, products: [], timings };
 
   // 2. Produktdata for alle kandidater i ét kald
   const fields =
@@ -100,6 +112,7 @@ export async function magentoSearch(query: string): Promise<{ total: number; pro
       fields,
     })}`,
   );
+  lap("products");
   const byId = new Map((list.items || []).map((p) => [p.id, p]));
 
   const vat = cfg.pricesInclVat ? 1 : 1.25;
@@ -150,9 +163,11 @@ export async function magentoSearch(query: string): Promise<{ total: number; pro
     }),
   );
   sort();
+  lap("salable");
 
   return {
     total: search.total_count ?? ids.length,
     products: products.map(({ rank: _rank, ...p }) => p),
+    timings,
   };
 }
