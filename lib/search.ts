@@ -20,7 +20,7 @@ export async function searchProducts(query: string, limit = 8): Promise<SearchRe
     products: r.products.slice(0, limit),
     ms: Date.now() - t0,
     source,
-    timings: "timings" in r ? r.timings : undefined,
+    timings: "timings" in r ? (r.timings as SearchResult["timings"]) : undefined,
   };
 
   cache.set(key, { at: Date.now(), value });
