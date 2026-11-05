@@ -9,16 +9,21 @@ export const maxDuration = 30;
 export async function GET(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "ukendt";
   if (rateLimited(ip)) return new Response("For mange forespørgsler.", { status: 429 });
-  const q = new URL(req.url).searchParams.get("q")?.slice(0, 300) || "Jeg skal bruge en kuglehane";
+  const params = new URL(req.url).searchParams;
+  const q = params.get("q")?.slice(0, 300) || "Jeg skal bruge en kuglehane";
+  const effort = ["none", "minimal", "low", "medium"].includes(params.get("effort") || "")
+    ? (params.get("effort") as string)
+    : undefined;
 
   const t0 = Date.now();
   const { provider, id } = getModel();
   try {
-    const r = await generateText(chatSettings([{ role: "user", content: q }]));
+    const r = await generateText(chatSettings([{ role: "user", content: q }], effort));
     return Response.json(
       {
         ok: true,
         model: `${provider}/${id}`,
+        effort: effort || process.env.AI_REASONING_EFFORT || "low",
         ms: Date.now() - t0,
         finishReason: r.finishReason,
         text: r.text,

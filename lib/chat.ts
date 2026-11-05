@@ -49,7 +49,7 @@ export type ChatTools = typeof tools;
  * de tokens tæller med i maxOutputTokens, så loftet skal være højt nok, og
  * tænkningen holdes lav for at få hurtige svar.
  */
-export function chatSettings(messages: ModelMessage[]) {
+export function chatSettings(messages: ModelMessage[], effortOverride?: string) {
   const { model, provider } = getModel();
   return {
     model,
@@ -60,7 +60,12 @@ export function chatSettings(messages: ModelMessage[]) {
     maxOutputTokens: 2500,
     providerOptions:
       provider === "openai"
-        ? { openai: { reasoningEffort: process.env.AI_REASONING_EFFORT || "low", textVerbosity: "low" } }
+        ? {
+            openai: {
+              reasoningEffort: effortOverride || process.env.AI_REASONING_EFFORT || "low",
+              textVerbosity: "low",
+            },
+          }
         : undefined,
   };
 }
