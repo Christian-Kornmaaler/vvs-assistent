@@ -28,13 +28,14 @@ export async function searchProducts(query: string, limit = 8): Promise<SearchRe
   // (fx "stophane"), så "vinkel stophane" ikke vinder med en masse vinkelfittings.
   if (r.total === 0) {
     const variants = queryVariants(query);
-    const head = headWord(query);
     if (variants.length) {
       const results = await Promise.all(variants.map((v) => run(v).catch(() => null)));
       let best = -1;
       let bestScore = -1;
       results.forEach((x, i) => {
         if (!x || x.total === 0) return;
+        // Hver variant bedømmes på sit eget hovedord (synonymet, hvis der er brugt et).
+        const head = headWord(variants[i]);
         const hits = head
           ? x.products.slice(0, limit).filter((p) => p.name.toLowerCase().includes(head)).length
           : 0;

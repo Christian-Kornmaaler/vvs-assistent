@@ -37,14 +37,36 @@ function splitCompound(word: string): string[] | null {
 /** Søgningens hovedord (det vigtigste navneord), fx "stophane" i "vinkelstophane 1/2". */
 export function headWord(query: string): string | null {
   const words = query.replace(DIM_RE, " ").split(/\s+/).filter(Boolean);
+  // Først et kendt fagord som helt ord, så efterleddet af et sammensat ord, ellers sidste lange ord.
+  for (let i = words.length - 1; i >= 0; i--) if (HEADS.includes(words[i].toLowerCase())) return words[i].toLowerCase();
   for (let i = words.length - 1; i >= 0; i--) {
     const s = splitCompound(words[i]);
     if (s) return s[1];
-    const w = words[i].toLowerCase();
-    if (HEADS.includes(w) || w.length >= 4) return w;
   }
-  return null;
+  const long = [...words].reverse().find((w) => w.length >= 4);
+  return long ? long.toLowerCase() : null;
 }
+
+/**
+ * Kundens ord -> katalogets ord. Kataloget bruger leverandørernes betegnelser
+ * (fx "kuglehane", "armatur"), mens kunder skriver "stophane", "vandhane" osv.
+ * Udvid listen efterhånden som der dukker nye eksempler op.
+ */
+const SYNONYMS: [RegExp, string][] = [
+  [/\bvinkel ?stophane\b|\bvinkelventil\b|\bstophane under (?:køkken)?vask\w*/i, "ballofix vinkel"],
+  [/\bstophane\b|\bafspærringshane\b|\bhovedhane\b/i, "kuglehane"],
+  [/\bvandhane\b|\bblandingsbatteri\b|\betgrebsbatteri\b/i, "armatur"],
+  [/\bbadeværelseshane\b|\bhåndvaskhane\b/i, "håndvaskarmatur"],
+  [/\bkøkkenhane\b/i, "køkkenarmatur"],
+  [/\bbrusebatteri\b|\bbrusehane\b/i, "brusearmatur"],
+  [/\bregnbruser\b/i, "hovedbruser"],
+  [/\bvandlås\b|\bvandlaas\b/i, "vandlås"],
+  [/\bgevindtape\b|\bteflon\b/i, "teflontape"],
+  [/\bhusvandsmåler\b|\bvandur\b/i, "vandmåler"],
+  [/\bradiatortermostat\b|\btermostathoved\b/i, "termostatføler"],
+  [/\bsikkerhedsventil\b/i, "sikkerhedsventil"],
+  [/\bstikdåse\b/i, "stikkontakt"],
+];
 
 export function queryVariants(query: string): string[] {
   const q = query.trim().replace(/\s+/g, " ");
@@ -57,6 +79,14 @@ export function queryVariants(query: string): string[] {
     if (v.length >= 2 && v.toLowerCase() !== q.toLowerCase() && !out.some((o) => o.toLowerCase() === v.toLowerCase()))
       out.push(v);
   };
+
+  // 0. Synonymer (kundens ord -> katalogets ord) – første match vinder
+  for (const [re, to] of SYNONYMS) {
+    if (re.test(q)) {
+      add(q.replace(re, to));
+      break;
+    }
+  }
 
   // 1. Split sammensatte ord
   const split = words.map((w) => splitCompound(w));
@@ -73,5 +103,5 @@ export function queryVariants(query: string): string[] {
   // 3. Uden bindestreger og specialtegn
   add(q.replace(/[-_/]+(?!\d)/g, " ").replace(/[^\p{L}\p{N}\s/.]/gu, " "));
 
-  return out.slice(0, 3);
+  return out.slice(0, 4);
 }
