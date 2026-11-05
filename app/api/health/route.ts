@@ -1,11 +1,17 @@
 import { aiConfigured, getModel } from "@/lib/model";
-import { magentoConfigured } from "@/lib/magento";
+import { magentoConfigured, magentoInfo, magentoPing } from "@/lib/magento";
 
-// Viser opsætning uden at afsløre nøgler.
-export async function GET() {
+// Viser opsætning uden at afsløre nøgler. ?ping=1 tester også forbindelsen til Magento.
+export async function GET(req: Request) {
   const { provider, id } = getModel();
-  return Response.json({
-    ai: aiConfigured() ? { provider, model: id } : "mangler nøgle",
-    produkter: magentoConfigured ? "magento" : "demo-data (MAGENTO_URL/MAGENTO_TOKEN mangler)",
-  });
+  const ping = new URL(req.url).searchParams.has("ping");
+  return Response.json(
+    {
+      ai: aiConfigured() ? { provider, model: id } : "mangler nøgle",
+      produkter: magentoConfigured ? "magento" : "demo-data (MAGENTO_URL/MAGENTO_TOKEN mangler)",
+      ...(magentoConfigured ? { magento: magentoInfo() } : {}),
+      ...(ping && magentoConfigured ? { forbindelse: await magentoPing() } : {}),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

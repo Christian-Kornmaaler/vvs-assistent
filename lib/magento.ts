@@ -1,3 +1,4 @@
+import { oauthHeader, percentEncode } from "./oauth";
 import type { Product } from "./types";
 
 /**
@@ -12,9 +13,13 @@ import type { Product } from "./types";
  */
 
 const cfg = {
-  url: (process.env.MAGENTO_URL || "").replace(/\/$/, ""),
-  token: process.env.MAGENTO_TOKEN || "",
-  store: process.env.MAGENTO_STORE_CODE || "default",
+  url: (process.env.MAGENTO_URL || "").trim().replace(/\/+$/, ""),
+  token: (process.env.MAGENTO_TOKEN || "").trim(),
+  consumerKey: (process.env.MAGENTO_CONSUMER_KEY || "").trim(),
+  consumerSecret: (process.env.MAGENTO_CONSUMER_SECRET || "").trim(),
+  accessTokenSecret: (process.env.MAGENTO_ACCESS_TOKEN_SECRET || "").trim(),
+  // Tom = butikkens standard-storeview (/rest/V1/...), som kundeservice-appen bruger.
+  store: (process.env.MAGENTO_STORE_CODE || "").trim(),
   stockId: process.env.MAGENTO_STOCK_ID || "1",
   urlSuffix: process.env.MAGENTO_URL_SUFFIX ?? ".html",
   shopUrl: (process.env.SHOP_URL || process.env.MAGENTO_URL || "").replace(/\/$/, ""),
@@ -23,6 +28,18 @@ const cfg = {
 };
 
 export const magentoConfigured = Boolean(cfg.url && cfg.token);
+const useOAuth = Boolean(cfg.consumerKey && cfg.consumerSecret && cfg.accessTokenSecret);
+
+/** Til /api/health: hvilken host og godkendelse der bruges (ingen hemmeligheder). */
+export function magentoInfo() {
+  let host = "";
+  try {
+    host = cfg.url ? new URL(cfg.url).host : "";
+  } catch {
+    host = "ugyldig MAGENTO_URL";
+  }
+  return { host, auth: useOAuth ? "oauth" : "bearer", store: cfg.store || "(standard)" };
+}
 
 // Hvor mange pladser et ikke-lagerført produkt rykkes ned i rangeringen.
 // Lagervarer prioriteres, men et meget præcist match på en bestillingsvare forsvinder ikke.
@@ -30,17 +47,33 @@ const OUT_OF_STOCK_PENALTY = 8;
 const CANDIDATES = 40;
 const VERIFY_TOP = 10;
 
-async function mget<T>(path: string, timeoutMs = 4000): Promise<T> {
-  const res = await fetch(`${cfg.url}/rest/${cfg.store}${path}`, {
-    headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/json" },
+async function mget<T>(path: string, query: Record<string, string | number> = {}, timeoutMs = 4000): Promise<T> {
+  const q: Record<string, string> = Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]));
+  const base = `${cfg.url}/rest${cfg.store ? `/${cfg.store}` : ""}/V1${path}`;
+  const qs = Object.entries(q)
+    .map(([k, v]) => `${percentEncode(k)}=${percentEncode(v)}`)
+    .join("&");
+  const auth = useOAuth
+    ? oauthHeader("GET", base, { ...cfg, accessToken: cfg.token }, q)
+    : `Bearer ${cfg.token}`;
+
+  const res = await fetch(qs ? `${base}?${qs}` : base, {
+    headers: { Authorization: auth, Accept: "application/json" },
     signal: AbortSignal.timeout(timeoutMs),
     cache: "no-store",
+    redirect: "manual",
   });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(
+      `Magento omdirigerer ${path} til ${res.headers.get("location") || "?"} – ret MAGENTO_URL til den adresse`,
+    );
+  }
   if (!res.ok) {
     // Magentos egen fejltekst (fx manglende rettigheder) – aldrig selve tokenet.
+    const raw = await res.text().catch(() => "");
     let detail = "";
     try {
-      const body = (await res.json()) as { message?: string; parameters?: Record<string, string> | string[] };
+      const body = JSON.parse(raw) as { message?: string; parameters?: Record<string, string> | string[] };
       detail = body.message || "";
       const params = body.parameters;
       if (params && !Array.isArray(params)) {
@@ -49,14 +82,29 @@ async function mget<T>(path: string, timeoutMs = 4000): Promise<T> {
         params.forEach((v, i) => (detail = detail.replace(`%${i + 1}`, String(v))));
       }
     } catch {
-      /* ikke JSON */
+      // Ikke JSON (fx en firewall- eller vedligeholdelsesside): vis lidt af teksten.
+      detail = stripHtml(raw, 160);
     }
-    throw new Error(`Magento ${res.status} på ${path.split("?")[0]}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    const server = res.headers.get("server");
+    throw new Error(
+      `Magento ${res.status} på ${path}${server ? ` (server: ${server})` : ""}${detail ? `: ${detail}` : ""}`,
+    );
   }
   return res.json() as Promise<T>;
 }
 
-type SearchResponse = { items?: { id: number; score?: number }[]; total_count?: number };
+/** Forbindelsestest uden søgning: henter butikkens websites (samme kald som kundeservice-appens test). */
+export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: string }> {
+  const t = Date.now();
+  try {
+    await mget<unknown>("/store/websites");
+    return { ok: true, ms: Date.now() - t };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - t, error: (e as Error).message };
+  }
+}
+
+type SearchResponse ={ items?: { id: number; score?: number }[]; total_count?: number };
 type MagentoProduct = {
   id: number;
   sku: string;
@@ -84,12 +132,6 @@ export function stripHtml(html: string, max = 180): string {
   return text.length > max ? text.slice(0, max - 1).trimEnd() + "…" : text;
 }
 
-function qs(params: Record<string, string | number>): string {
-  return Object.entries(params)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-    .join("&");
-}
-
 export type Timings = { search: number; products: number; salable: number };
 
 export async function magentoSearch(
@@ -103,15 +145,13 @@ export async function magentoSearch(
   };
 
   // 1. Relevans-søgning i Magentos søgeindeks
-  const search = await mget<SearchResponse>(
-    `/V1/search?${qs({
-      "searchCriteria[requestName]": "quick_search_container",
-      "searchCriteria[filterGroups][0][filters][0][field]": "search_term",
-      "searchCriteria[filterGroups][0][filters][0][value]": query,
-      "searchCriteria[pageSize]": CANDIDATES,
-      "searchCriteria[currentPage]": 1,
-    })}`,
-  );
+  const search = await mget<SearchResponse>("/search", {
+    "searchCriteria[requestName]": "quick_search_container",
+    "searchCriteria[filterGroups][0][filters][0][field]": "search_term",
+    "searchCriteria[filterGroups][0][filters][0][value]": query,
+    "searchCriteria[pageSize]": CANDIDATES,
+    "searchCriteria[currentPage]": 1,
+  });
   lap("search");
   const ids = (search.items || []).map((i) => i.id);
   if (ids.length === 0) return { total: 0, products: [], timings };
@@ -119,15 +159,13 @@ export async function magentoSearch(
   // 2. Produktdata for alle kandidater i ét kald
   const fields =
     "items[id,sku,name,price,custom_attributes[attribute_code,value],extension_attributes[stock_item[qty,is_in_stock]]]";
-  const list = await mget<{ items?: MagentoProduct[] }>(
-    `/V1/products?${qs({
-      "searchCriteria[filterGroups][0][filters][0][field]": "entity_id",
-      "searchCriteria[filterGroups][0][filters][0][value]": ids.join(","),
-      "searchCriteria[filterGroups][0][filters][0][condition_type]": "in",
-      "searchCriteria[pageSize]": CANDIDATES,
-      fields,
-    })}`,
-  );
+  const list = await mget<{ items?: MagentoProduct[] }>("/products", {
+    "searchCriteria[filterGroups][0][filters][0][field]": "entity_id",
+    "searchCriteria[filterGroups][0][filters][0][value]": ids.join(","),
+    "searchCriteria[filterGroups][0][filters][0][condition_type]": "in",
+    "searchCriteria[pageSize]": CANDIDATES,
+    fields,
+  });
   lap("products");
   const byId = new Map((list.items || []).map((p) => [p.id, p]));
 
@@ -166,7 +204,8 @@ export async function magentoSearch(
     products.slice(0, VERIFY_TOP).map(async (p) => {
       try {
         const qty = await mget<number>(
-          `/V1/inventory/get-product-salable-qty/${encodeURIComponent(p.sku)}/${cfg.stockId}`,
+          `/inventory/get-product-salable-qty/${encodeURIComponent(p.sku)}/${cfg.stockId}`,
+          {},
           1200,
         );
         if (typeof qty === "number") {
