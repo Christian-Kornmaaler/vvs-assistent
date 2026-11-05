@@ -40,10 +40,11 @@ export const tools = {
           (p.short ? `\n   Tekst: ${p.short}` : "")
         );
       });
-      return {
-        type: "text",
-        value: `${output.total} resultater for "${output.query}". Viser kunden disse:\n${lines.join("\n")}`,
-      };
+      const used = "usedQuery" in output ? output.usedQuery : undefined;
+      const head = used
+        ? `Ingen resultater for "${output.query}", så der blev søgt på "${used}" i stedet: ${output.total} resultater.`
+        : `${output.total} resultater for "${output.query}".`;
+      return { type: "text", value: `${head} Viser kunden disse:\n${lines.join("\n")}` };
     },
   }),
 };

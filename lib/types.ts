@@ -24,6 +24,8 @@ export type Spec = { label: string; value: string; card: boolean };
 
 export type SearchResult = {
   query: string;
+  /** Hvis søgningen gav 0, den alternative formulering der blev brugt i stedet */
+  usedQuery?: string;
   total: number;
   products: Product[];
   ms: number;
