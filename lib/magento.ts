@@ -380,8 +380,9 @@ export async function magentoSearch(
   const sort = () =>
     products.sort(
       (a, b) =>
-        tier(a) - tier(b) ||
+        // Aftalt regel: ALLE lagervarer står altid før bestillingsvarer.
         Number(b.inStock) - Number(a.inStock) ||
+        tier(a) - tier(b) ||
         price(a) - price(b) ||
         a.rank - b.rank,
     );
