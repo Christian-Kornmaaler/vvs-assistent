@@ -1,0 +1,40 @@
+.main {
+  min-height: 100dvh;
+  padding: 48px 16px;
+}
+.box {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 28px 28px 22px;
+}
+.box h1 {
+  font-size: 24px;
+  margin: 4px 0 12px;
+}
+.box h2 {
+  font-size: 16px;
+  margin: 24px 0 6px;
+}
+.kicker {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand);
+  font-weight: 700;
+}
+.code {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 12px;
+  font-size: 13px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.note {
+  font-size: 13.5px;
+  color: var(--muted);
+}
