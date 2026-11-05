@@ -62,7 +62,7 @@
     '<div class="backdrop"></div>' +
     '<div class="panel" role="dialog" aria-label="Produktassistent" aria-modal="true"></div>' +
     '<button class="btn" type="button" aria-label="Åbn produktassistent">' +
-    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d=\"M10 1.5c.55 4.9 3.6 7.95 8.5 8.5-4.9.55-7.95 3.6-8.5 8.5-.55-4.9-3.6-7.95-8.5-8.5 4.9-.55 7.95-3.6 8.5-8.5z\"/><path d=\"M19 13.5c.3 2.5 2 4.2 4.5 4.5-2.5.3-4.2 2-4.5 4.5-.3-2.5-2-4.2-4.5-4.5 2.5-.3 4.2-2 4.5-4.5z\"/></svg>' +
     "<span>" + label.replace(/</g, "&lt;") + "</span>" +
     "</button></div>";
 
