@@ -6,7 +6,8 @@
   max-width: 640px;
   margin: 0 auto;
   background: var(--card);
-  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(20, 40, 60, 0.06);
   padding: 28px 28px 22px;
 }
 .box h1 {
@@ -27,7 +28,7 @@
 }
 .code {
   background: var(--bg);
-  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 12px;
   font-size: 13px;
   overflow-x: auto;

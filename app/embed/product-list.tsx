@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Product, SearchResult } from "@/lib/types";
 import s from "./assistant.module.css";
 
-const kr = (n: number) =>
-  n.toLocaleString("da-DK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr.";
+// Samme prisformat som shoppen: "30,00 DKK"
+const dkk = (n: number) =>
+  n.toLocaleString("da-DK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " DKK";
 
 /**
  * Uendelig produktliste: viser første side fra AI'ens søgning og henter
@@ -93,32 +94,41 @@ export default function ProductList({ result, dim }: { result: SearchResult; dim
 function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
   return (
     <a className={`${s.card} ${dim ? s.dim : ""}`} href={p.url} target="_top" rel="noopener">
-      <div className={s.thumb}>{p.image ? <img src={p.image} alt="" loading="lazy" /> : <BoxIcon />}</div>
-      <div className={s.cardBody}>
-        <div className={s.name}>{p.name}</div>
-        {p.specs?.some((x) => x.card) ? (
-          <div className={s.specs}>
-            {p.specs
-              .filter((x) => x.card)
-              .slice(0, 3)
-              .map((x) => (
-                <span key={x.label} title={x.label}>
-                  {x.value}
-                </span>
-              ))}
-          </div>
-        ) : (
-          p.short &&
-          !p.short.toLowerCase().startsWith(p.name.toLowerCase().slice(0, 25)) && (
-            <div className={s.short}>{p.short}</div>
-          )
-        )}
-        <div className={s.meta}>
-          {p.price != null && <span className={s.price}>{kr(p.price)}</span>}
-          <span className={p.inStock ? s.inStock : s.order}>
-            {p.inStock ? "På lager" : "Bestillingsvare"}
-            {p.delivery ? ` · ${p.delivery}` : ""}
+      <div className={s.cardTop}>
+        <div className={s.thumb}>{p.image ? <img src={p.image} alt="" loading="lazy" /> : <BoxIcon />}</div>
+        <div className={s.cardBody}>
+          <div className={s.name}>{p.name}</div>
+          <div className={s.sku}>Varenr. {p.sku}</div>
+          {p.specs?.some((x) => x.card) ? (
+            <div className={s.specs}>
+              {p.specs
+                .filter((x) => x.card)
+                .slice(0, 3)
+                .map((x) => (
+                  <span key={x.label} title={x.label}>
+                    {x.value}
+                  </span>
+                ))}
+            </div>
+          ) : (
+            p.short &&
+            !p.short.toLowerCase().startsWith(p.name.toLowerCase().slice(0, 25)) && (
+              <div className={s.short}>{p.short}</div>
+            )
+          )}
+        </div>
+      </div>
+      <div className={s.priceBox}>
+        <div>
+          {p.price != null ? <span className={s.price}>{dkk(p.price)}</span> : <span className={s.price}>Se pris</span>}
+          {p.price != null && <span className={s.vat}>Inkl. moms/pr. stk.</span>}
+        </div>
+        <div className={s.stock}>
+          <span className={s.stockLine}>
+            <i className={p.inStock ? s.dotOk : s.dotOrder} aria-hidden />
+            {p.inStock ? (p.qty && p.qty > 0 ? `${Math.floor(p.qty)} på lager` : "På lager") : "Bestillingsvare"}
           </span>
+          {p.delivery && <span className={s.delivery}>Levering {p.delivery}</span>}
         </div>
       </div>
     </a>
