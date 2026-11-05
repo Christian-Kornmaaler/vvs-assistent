@@ -20,7 +20,7 @@ export function getModel(): { model: LanguageModel; provider: string; id: string
     const id = process.env.AI_MODEL || "claude-haiku-5-5";
     return { model: anthropic(id), provider, id };
   }
-  const id = process.env.AI_MODEL || "gpt-5-mini";
+  const id = process.env.AI_MODEL || "gpt-5.4-mini";
   return { model: openai(id), provider, id };
 }
 

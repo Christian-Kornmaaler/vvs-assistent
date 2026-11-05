@@ -1,50 +1,11 @@
-import { convertToModelMessages, stepCountIs, streamText, tool, type UIMessage } from "ai";
-import { z } from "zod";
-import { aiConfigured, getModel } from "@/lib/model";
-import { INSTRUCTIONS } from "@/lib/prompt";
+import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import { chatSettings, tools } from "@/lib/chat";
+import { aiConfigured } from "@/lib/model";
 import { rateLimited } from "@/lib/rate-limit";
-import { searchProducts } from "@/lib/search";
+
+export type { ChatTools } from "@/lib/chat";
 
 export const maxDuration = 30;
-
-const tools = {
-  search_products: tool({
-    description:
-      "Søg i webshoppens produktkatalog. Returnerer de bedst matchende produkter med lagerstatus; lagervarer er prioriteret. Resultaterne vises automatisk for kunden.",
-    inputSchema: z.object({
-      query: z.string().min(2).max(120).describe("Korte søgeord, fx 'kuglehane 3/4' eller 'pressfitting knæ 22 mm'"),
-    }),
-    execute: async ({ query }) => {
-      try {
-        return await searchProducts(query, 8);
-      } catch (e) {
-        return { query, total: 0, products: [], ms: 0, source: "magento" as const, error: (e as Error).message };
-      }
-    },
-    // Modellen får en kompakt tekstudgave (hurtigere og billigere); UI'et får de fulde data.
-    toModelOutput: ({ output }) => {
-      if ("error" in output && output.error) return { type: "text", value: `Søgefejl: ${output.error}` };
-      if (output.products.length === 0) return { type: "text", value: `Ingen resultater for "${output.query}".` };
-      const lines = output.products.map((p, i) => {
-        const specs = (p.specs || [])
-          .map((s) => `${s.label}: ${s.value}`)
-          .join("; ")
-          .slice(0, 400);
-        return (
-          `${i + 1}. ${p.name} | varenr ${p.sku} | ${p.price != null ? `${p.price.toFixed(2)} kr` : "pris ukendt"} | ${p.inStock ? "på lager" : "bestillingsvare"}${p.delivery ? ` | levering ${p.delivery}` : ""}` +
-          (specs ? `\n   Egenskaber: ${specs}` : "") +
-          (p.short ? `\n   Tekst: ${p.short}` : "")
-        );
-      });
-      return {
-        type: "text",
-        value: `${output.total} resultater for "${output.query}". Viser kunden disse:\n${lines.join("\n")}`,
-      };
-    },
-  }),
-};
-
-export type ChatTools = typeof tools;
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "ukendt";
@@ -62,15 +23,15 @@ export async function POST(req: Request) {
   const lastText = last?.parts?.map((p) => (p.type === "text" ? p.text : "")).join("") || "";
   if (lastText.length > 1000) return new Response("Beskeden er for lang.", { status: 413 });
 
-  const { model } = getModel();
   const result = streamText({
-    model,
-    instructions: INSTRUCTIONS,
-    messages: await convertToModelMessages(messages, { tools }),
-    tools,
-    stopWhen: stepCountIs(4),
-    maxOutputTokens: 400,
+    ...chatSettings(await convertToModelMessages(messages, { tools })),
+    onError: ({ error }) => console.error("chat fejl:", error),
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      console.error("chat stream fejl:", error);
+      return "Assistenten kunne ikke svare lige nu. Prøv igen om et øjeblik.";
+    },
+  });
 }
