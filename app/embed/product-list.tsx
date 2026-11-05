@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Product, SearchResult } from "@/lib/types";
 import s from "./assistant.module.css";
+import { track } from "./track-client";
 
 // Samme prisformat som shoppen: "30,00 DKK"
 const dkk = (n: number) =>
@@ -70,12 +71,12 @@ export default function ProductList({ result, dim }: { result: SearchResult; dim
       <div className={s.productList} ref={listRef}>
         {/* Alle lagervarer øverst – også når flere sider hentes ved scroll – derefter bestillingsvarer.
             Rækkefølgen inden for hver gruppe er den, serveren har sorteret (relevans, pris). */}
-        {inStock.map((p) => (
-          <ProductCard key={p.sku} p={p} dim={dim} />
+        {inStock.map((p, i) => (
+          <ProductCard key={p.sku} p={p} dim={dim} position={i + 1} query={query} />
         ))}
         {ordered.length > 0 && inStock.length > 0 && <div className={s.groupLabel}>Bestillingsvarer</div>}
-        {ordered.map((p) => (
-          <ProductCard key={p.sku} p={p} dim={dim} />
+        {ordered.map((p, i) => (
+          <ProductCard key={p.sku} p={p} dim={dim} position={inStock.length + i + 1} query={query} />
         ))}
         {products.length === 0 && (
           <p className={s.empty}>Ingen produkter matchede. Prøv at beskrive det på en anden måde.</p>
@@ -100,9 +101,11 @@ export default function ProductList({ result, dim }: { result: SearchResult; dim
   );
 }
 
-function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
+function ProductCard({ p, dim, position, query }: { p: Product; dim: boolean; position: number; query: string }) {
+  const onClick = () =>
+    track({ type: "click", sku: p.sku, productName: p.name, position, query, price: p.price, inStock: p.inStock });
   return (
-    <a className={`${s.card} ${dim ? s.dim : ""}`} href={p.url} target="_top" rel="noopener">
+    <a className={`${s.card} ${dim ? s.dim : ""}`} href={p.url} target="_top" rel="noopener" onClick={onClick} onAuxClick={onClick}>
       <div className={s.cardTop}>
         <div className={s.thumb}>{p.image ? <img src={p.image} alt="" loading="lazy" /> : <BoxIcon />}</div>
         <div className={s.cardBody}>

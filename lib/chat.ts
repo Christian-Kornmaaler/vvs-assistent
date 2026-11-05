@@ -3,8 +3,13 @@ import { z } from "zod";
 import { getModel } from "./model";
 import { INSTRUCTIONS } from "./prompt";
 import { searchProducts } from "./search";
+import type { SearchResult } from "./types";
 
-export const tools = {
+/** Kaldes efter hver søgning (bruges til statistik). */
+export type OnSearch = (r: SearchResult) => void;
+
+export function makeTools(onSearch?: OnSearch) {
+  return {
   search_products: tool({
     description:
       "Søg i webshoppens produktkatalog. Returnerer de bedst matchende produkter med lagerstatus; lagervarer er prioriteret. Resultaterne vises automatisk for kunden.",
@@ -13,7 +18,9 @@ export const tools = {
     }),
     execute: async ({ query }) => {
       try {
-        return await searchProducts(query);
+        const r = await searchProducts(query);
+        onSearch?.(r);
+        return r;
       } catch (e) {
         console.error("search_products fejl:", (e as Error).message);
         return { query, total: 0, products: [], ms: 0, source: "magento" as const, error: (e as Error).message };
@@ -70,8 +77,10 @@ export const tools = {
     execute: async ({ options }) => ({ options }),
     toModelOutput: () => ({ type: "text", value: "Svaret og forslagene vises for kunden." }),
   }),
-};
+  };
+}
 
+export const tools = makeTools();
 export type ChatTools = typeof tools;
 
 /**
@@ -79,13 +88,13 @@ export type ChatTools = typeof tools;
  * de tokens tæller med i maxOutputTokens, så loftet skal være højt nok, og
  * tænkningen holdes lav for at få hurtige svar.
  */
-export function chatSettings(messages: ModelMessage[], effortOverride?: string) {
+export function chatSettings(messages: ModelMessage[], effortOverride?: string, toolset: ChatTools = tools) {
   const { model, provider } = getModel();
   return {
     model,
     instructions: INSTRUCTIONS,
     messages,
-    tools,
+    tools: toolset,
     // Stop når forslagene er vist (sparer en ekstra AI-runde), ellers efter 5 trin.
     stopWhen: [hasToolCall("suggest_replies"), stepCountIs(5)],
     // Modellen SKAL bruge et værktøj i hvert trin: søge eller svare via suggest_replies.

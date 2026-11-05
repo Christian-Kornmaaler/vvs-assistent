@@ -7,6 +7,7 @@ import type { ChatTools } from "@/app/api/chat/route";
 import type { SearchResult } from "@/lib/types";
 import s from "./assistant.module.css";
 import ProductList from "./product-list";
+import { getSession, getVisitor, track } from "./track-client";
 
 type Msg = UIMessage<unknown, never, InferUITools<ChatTools>>;
 
@@ -27,7 +28,8 @@ function close() {
 
 export default function Assistant() {
   const { messages, sendMessage, status, error, stop } = useChat<Msg>({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    // Anonyme id'er sendes med, så søgninger kan tælles pr. bruger/samtale (ingen chattekst gemmes).
+    transport: new DefaultChatTransport({ api: "/api/chat", body: () => ({ visitor: getVisitor(), session: getSession() }) }),
   });
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,6 +67,11 @@ export default function Assistant() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, status]);
+
+  // Statistik: assistenten er åbnet (én gang pr. samtale).
+  useEffect(() => {
+    track({ type: "open", page: document.referrer || null });
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
