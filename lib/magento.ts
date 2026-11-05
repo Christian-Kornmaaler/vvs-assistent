@@ -104,6 +104,49 @@ export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: 
   }
 }
 
+// ---------- Reserve-søgning i produktnavne ----------
+
+/**
+ * Direkte søgning i produktnavne (SQL LIKE) for varer, som søgeindekset ikke kender.
+ * Hvert ord (ental/flertal via stammen) skal stå i navnet. Kun aktive varer, der er
+ * synlige i katalog eller søgning.
+ */
+async function nameSearchIds(query: string, page: number): Promise<{ ids: number[]; total: number }> {
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/[%_]/g, ""))
+    .filter((w) => w.length >= 3)
+    .slice(0, 4)
+    .map((w) => (/^\p{L}+$/u.test(w) ? stem(w) : w));
+  if (words.length === 0) return { ids: [], total: 0 };
+  const q: Record<string, string | number> = {};
+  let g = 0;
+  for (const w of words) {
+    q[`searchCriteria[filterGroups][${g}][filters][0][field]`] = "name";
+    q[`searchCriteria[filterGroups][${g}][filters][0][value]`] = `%${w}%`;
+    q[`searchCriteria[filterGroups][${g}][filters][0][condition_type]`] = "like";
+    g++;
+  }
+  q[`searchCriteria[filterGroups][${g}][filters][0][field]`] = "status";
+  q[`searchCriteria[filterGroups][${g}][filters][0][value]`] = 1;
+  g++;
+  q[`searchCriteria[filterGroups][${g}][filters][0][field]`] = "visibility";
+  q[`searchCriteria[filterGroups][${g}][filters][0][value]`] = 1;
+  q[`searchCriteria[filterGroups][${g}][filters][0][condition_type]`] = "neq";
+  q["searchCriteria[pageSize]"] = CANDIDATES;
+  q["searchCriteria[currentPage]"] = page;
+  q.fields = "items[id],total_count";
+  try {
+    const res = await mget<{ items?: { id: number }[]; total_count?: number }>("/products", q, 6000);
+    const ids = (res.items || []).map((i) => i.id);
+    return { ids, total: res.total_count ?? ids.length };
+  } catch (e) {
+    console.error("navnesøgning fejl:", (e as Error).message);
+    return { ids: [], total: 0 };
+  }
+}
+
 // ---------- Præcisions-sortering ----------
 
 const norm = (s: string) =>
@@ -322,7 +365,17 @@ export async function magentoSearch(
     "searchCriteria[currentPage]": page,
   });
   lap("search");
-  const ids = (search.items || []).map((i) => i.id);
+  let ids = (search.items || []).map((i) => i.id);
+  let total = search.total_count ?? ids.length;
+  let viaNameFallback = false;
+  // Reserve: giver søgeindekset 0 (fx nye varer, der endnu ikke er indekseret), søges der
+  // direkte i produktnavnene i databasen – alle ord skal stå i navnet ("pakgarn", "hamp").
+  if (ids.length === 0) {
+    const byName = await nameSearchIds(query, page);
+    ids = byName.ids;
+    total = byName.total;
+    viaNameFallback = ids.length > 0;
+  }
   if (ids.length === 0) return { total: 0, products: [], timings };
 
   // 2. Produktdata for alle kandidater i ét kald
@@ -392,7 +445,7 @@ export async function magentoSearch(
   // 3. Lager fra MSI source-items (én pr. leverandør-kilde) – ét samlet kald for alle kandidater.
   //    Lagervare = mindst én aktiv kilde (status 1) med antal > 0.
   //    Ingen source-item for en SKU = ingen kilde fører varen (ikke en fejl).
-  const debug: Record<string, unknown> = { labelAttributes: labels.size };
+  const debug: Record<string, unknown> = { labelAttributes: labels.size, viaNameFallback };
   try {
     const skus = products.map((p) => p.sku);
     const src = await mget<{ items?: SourceItem[] }>(
@@ -432,7 +485,7 @@ export async function magentoSearch(
   lap("salable");
 
   return {
-    total: search.total_count ?? ids.length,
+    total,
     products: products.map(({ rank: _rank, ...p }) => p),
     timings,
     debug,
