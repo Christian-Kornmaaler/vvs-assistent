@@ -2,7 +2,7 @@ import { hasToolCall, stepCountIs, tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { getModel } from "./model";
 import { INSTRUCTIONS } from "./prompt";
-import { searchProducts } from "./search";
+import { searchBest } from "./search";
 import type { SearchResult } from "./types";
 
 /** Kaldes efter hver søgning (bruges til statistik). */
@@ -15,10 +15,17 @@ export function makeTools(onSearch?: OnSearch) {
       "Søg i webshoppens produktkatalog. Returnerer de bedst matchende produkter med lagerstatus; lagervarer er prioriteret. Resultaterne vises automatisk for kunden.",
     inputSchema: z.object({
       query: z.string().min(2).max(120).describe("Korte søgeord, fx 'kuglehane 3/4' eller 'pressfitting knæ 22 mm'"),
+      alternatives: z
+        .array(z.string().min(2).max(120))
+        .max(2)
+        .optional()
+        .describe(
+          "1-2 andre måder samme vare kan hedde i kataloget: synonym, fagudtryk, anden stavemåde eller ental/flertal (fx query 'vinkelstophane' -> ['ballofix vinkel', 'vinkelventil']). Søges parallelt; den bedste vises.",
+        ),
     }),
-    execute: async ({ query }) => {
+    execute: async ({ query, alternatives }) => {
       try {
-        const r = await searchProducts(query);
+        const r = await searchBest(query, alternatives);
         onSearch?.(r);
         return r;
       } catch (e) {

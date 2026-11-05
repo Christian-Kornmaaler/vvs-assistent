@@ -55,8 +55,9 @@ function remember(key: string, value: SearchResult) {
  * Første side af en søgning (bruges af AI'en). Giver den 0 resultater, prøves
  * varianter parallelt (synonymer, sammensatte ord splittet, hovedord).
  */
-export async function searchProducts(query: string): Promise<SearchResult> {
-  const key = `${query.trim().toLowerCase()}|1`;
+export async function searchProducts(query: string, opts: { variants?: boolean } = {}): Promise<SearchResult> {
+  const withVariants = opts.variants !== false;
+  const key = `${query.trim().toLowerCase()}|1${withVariants ? "" : "|plain"}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return { ...hit.value, ms: 0 };
 
@@ -67,7 +68,7 @@ export async function searchProducts(query: string): Promise<SearchResult> {
   //  - sammensatte ord: "skruetrækker sæt" -> "skruetrækkersæt"
   //  - ental/flertal: "handske" <-> "handsker" (Magento matcher kun hele ord)
   // Den variant, hvor flest af de øverste varer indeholder ALLE ordene (på ordstammen), vinder.
-  const extra = [joinedVariant(query), ...numberVariants(query)].filter(
+  const extra = (withVariants ? [joinedVariant(query), ...numberVariants(query)] : []).filter(
     (v, i, a): v is string => !!v && v.toLowerCase() !== query.toLowerCase() && a.indexOf(v) === i,
   );
   const [r0, ...rx] = await Promise.all([run(query), ...extra.map((v) => run(v).catch(() => null))]);
@@ -86,7 +87,7 @@ export async function searchProducts(query: string): Promise<SearchResult> {
 
   // Vælg den variant, hvor flest af de øverste produkter faktisk indeholder variantens
   // hovedord, så fx "vinkel stophane" ikke vinder med en masse vinkelfittings.
-  if (r.total === 0) {
+  if (r.total === 0 && withVariants) {
     const variants = queryVariants(query);
     if (variants.length) {
       const results = await Promise.all(variants.map((v) => run(v).catch(() => null)));
@@ -146,4 +147,33 @@ export async function searchPage(query: string, page: number): Promise<SearchRes
   };
   remember(key, value);
   return value;
+}
+
+/**
+ * AI'ens søgning: kundens ord (query) + op til 2 alternative betegnelser, som AI'en
+ * selv foreslår (synonymer, fagudtryk, katalogets navn). Alle søges parallelt, og den,
+ * der rammer bedst (flest af de øverste varer indeholder søgningens ord), vises.
+ */
+export async function searchBest(query: string, alternatives: string[] = []): Promise<SearchResult> {
+  const alts = alternatives
+    .map((a) => a.trim())
+    .filter((a, i, arr) => a.length >= 2 && a.toLowerCase() !== query.trim().toLowerCase() && arr.indexOf(a) === i)
+    .slice(0, 2);
+  if (alts.length === 0) return searchProducts(query);
+
+  const all = await Promise.all([searchProducts(query), ...alts.map((a) => searchProducts(a, { variants: false }).catch(() => null))]);
+  const scoreOf = (r: SearchResult) => allWordsHits(r.usedQuery || r.query, r.products);
+  let best = all[0]!;
+  let bestScore = scoreOf(best);
+  for (const r of all.slice(1)) {
+    if (!r || r.total === 0) continue;
+    const sc = scoreOf(r);
+    if (sc > bestScore || (best.total === 0 && r.total > 0) || (sc === bestScore && r.total > best.total * 2)) {
+      best = r;
+      bestScore = sc;
+    }
+  }
+  if (best === all[0]) return best;
+  // Vis kunden, hvad der blev søgt på i stedet; behold kundens ord som "query" (statistik).
+  return { ...best, query, usedQuery: best.usedQuery || best.query };
 }
