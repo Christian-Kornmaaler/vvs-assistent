@@ -102,7 +102,49 @@ export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: 
   }
 }
 
-type SourceItem = { sku: string; source_code: string; quantity: number; status: number };
+type MagentoAttribute = {
+  attribute_code: string;
+  default_frontend_label?: string;
+  frontend_input?: string;
+  is_user_defined?: boolean;
+  is_filterable?: string | boolean;
+  is_filterable_in_search?: string | boolean;
+  is_searchable?: string | boolean;
+  is_visible_on_front?: string | boolean;
+  options?: { label: string; value: string }[];
+};
+
+/** Alle brugerdefinerede produktattributter med nøgletal (til opsætning). */
+export async function magentoAttributes() {
+  const res = await mget<{ items?: MagentoAttribute[] }>(
+    "/products/attributes",
+    {
+      "searchCriteria[pageSize]": 1000,
+      fields:
+        "items[attribute_code,default_frontend_label,frontend_input,is_user_defined,is_filterable,is_filterable_in_search,is_searchable,is_visible_on_front,options]",
+    },
+    15000,
+  );
+  const yes = (v: unknown) => v === true || v === "1" || v === 1;
+  return (res.items || [])
+    .filter((a) => yes(a.is_user_defined))
+    .map((a) => ({
+      code: a.attribute_code,
+      label: a.default_frontend_label || "",
+      type: a.frontend_input || "",
+      filter: yes(a.is_filterable) || yes(a.is_filterable_in_search),
+      search: yes(a.is_searchable),
+      front: yes(a.is_visible_on_front),
+      options: (a.options || []).filter((o) => o.value !== "").length,
+      examples: (a.options || [])
+        .filter((o) => o.value !== "")
+        .slice(0, 6)
+        .map((o) => o.label),
+    }))
+    .sort((a, b) => Number(b.filter) - Number(a.filter) || b.options - a.options);
+}
+
+type SourceItem ={ sku: string; source_code: string; quantity: number; status: number };
 type SearchResponse = { items?: { id: number; score?: number }[]; total_count?: number };
 type MagentoProduct = {
   id: number;
