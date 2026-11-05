@@ -6,7 +6,7 @@ import type { Product } from "./types";
  *
  * 1. /V1/search  -> Magentos egen OpenSearch-søgning (hurtig, relevans-sorteret id-liste)
  * 2. /V1/products -> henter data for de fundne id'er i ét kald (kun de felter vi bruger)
- * 3. MSI salable qty for de øverste resultater (parallelt, med timeout)
+ * 3. /V1/inventory/source-items -> lager pr. leverandør-kilde for alle kandidater i ét kald
  *
  * Senere (fase 2) kan dette erstattes af et dedikeret søgeindeks med embeddings,
  * uden at chat-delen skal ændres: den kalder kun searchProducts().
@@ -20,7 +20,6 @@ const cfg = {
   accessTokenSecret: (process.env.MAGENTO_ACCESS_TOKEN_SECRET || "").trim(),
   // Tom = butikkens standard-storeview (/rest/V1/...), som kundeservice-appen bruger.
   store: (process.env.MAGENTO_STORE_CODE || "").trim(),
-  stockId: process.env.MAGENTO_STOCK_ID || "1",
   urlSuffix: process.env.MAGENTO_URL_SUFFIX ?? ".html",
   shopUrl: (process.env.SHOP_URL || process.env.MAGENTO_URL || "").replace(/\/$/, ""),
   // Magento-priser er typisk ekskl. moms i admin. Sæt til "true" hvis katalogpriserne er inkl. moms.
@@ -45,7 +44,6 @@ export function magentoInfo() {
 // Lagervarer prioriteres, men et meget præcist match på en bestillingsvare forsvinder ikke.
 const OUT_OF_STOCK_PENALTY = 8;
 const CANDIDATES = 40;
-const VERIFY_TOP = 10;
 
 async function mget<T>(path: string, query: Record<string, string | number> = {}, timeoutMs = 4000): Promise<T> {
   const q: Record<string, string> = Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]));
@@ -104,7 +102,8 @@ export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: 
   }
 }
 
-type SearchResponse ={ items?: { id: number; score?: number }[]; total_count?: number };
+type SourceItem = { sku: string; source_code: string; quantity: number; status: number };
+type SearchResponse = { items?: { id: number; score?: number }[]; total_count?: number };
 type MagentoProduct = {
   id: number;
   sku: string;
@@ -158,7 +157,7 @@ export async function magentoSearch(
 
   // 2. Produktdata for alle kandidater i ét kald
   const fields =
-    "items[id,sku,name,price,custom_attributes[attribute_code,value],extension_attributes[stock_item[qty,is_in_stock]]]";
+    "items[id,sku,name,price,custom_attributes[attribute_code,value]]";
   const list = await mget<{ items?: MagentoProduct[] }>("/products", {
     "searchCriteria[filterGroups][0][filters][0][field]": "entity_id",
     "searchCriteria[filterGroups][0][filters][0][value]": ids.join(","),
@@ -199,34 +198,42 @@ export async function magentoSearch(
     );
   sort();
 
-  // Fejlsøgningsinfo (vises kun i /api/search, aldrig til modellen)
-  const first = list.items?.[0];
-  const debug: Record<string, unknown> = {
-    stockItemFields: first?.extension_attributes ? Object.keys(first.extension_attributes) : [],
-    firstStockItem: first?.extension_attributes?.stock_item ?? null,
-    salableErrors: [] as string[],
-  };
-
-  // 3. Bekræft MSI salable qty for de øverste (tager reservationer med). Falder tilbage på lagerfeltet ved timeout.
-  await Promise.all(
-    products.slice(0, VERIFY_TOP).map(async (p) => {
-      try {
-        const qty = await mget<number>(
-          `/inventory/get-product-salable-qty/${encodeURIComponent(p.sku)}/${cfg.stockId}`,
-          {},
-          1200,
-        );
-        if (typeof qty === "number") {
-          p.qty = qty;
-          p.inStock = qty > 0;
-        }
-      } catch (e) {
-        // behold værdien fra stock_item
-        const errs = debug.salableErrors as string[];
-        if (errs.length < 3) errs.push(`${p.sku}: ${(e as Error).message}`);
-      }
-    }),
-  );
+  // 3. Lager fra MSI source-items (én pr. leverandør-kilde) – ét samlet kald for alle kandidater.
+  //    Lagervare = mindst én aktiv kilde (status 1) med antal > 0.
+  //    Ingen source-item for en SKU = ingen kilde fører varen (ikke en fejl).
+  const debug: Record<string, unknown> = {};
+  try {
+    const skus = products.map((p) => p.sku);
+    const src = await mget<{ items?: SourceItem[] }>(
+      "/inventory/source-items",
+      {
+        "searchCriteria[filterGroups][0][filters][0][field]": "sku",
+        "searchCriteria[filterGroups][0][filters][0][value]": skus.join(","),
+        "searchCriteria[filterGroups][0][filters][0][condition_type]": "in",
+        "searchCriteria[pageSize]": skus.length * 8,
+      },
+      2500,
+    );
+    const qtyBySku = new Map<string, number>();
+    for (const s of src.items || []) {
+      if (s.status !== 1) continue;
+      qtyBySku.set(s.sku, (qtyBySku.get(s.sku) || 0) + Math.max(0, Number(s.quantity) || 0));
+    }
+    for (const p of products) {
+      const q = qtyBySku.get(p.sku) ?? 0;
+      p.qty = q;
+      p.inStock = q > 0;
+    }
+    debug.sourceItems = src.items?.length ?? 0;
+    debug.sources = [...new Set((src.items || []).map((s) => s.source_code))];
+  } catch (e) {
+    // Lagerdata utilgængelige: behold rækkefølgen fra søgningen, marker ikke noget som udsolgt.
+    debug.stockError = (e as Error).message;
+    for (const p of products) {
+      p.qty = null;
+      p.inStock = false;
+    }
+  }
   sort();
   lap("salable");
 
