@@ -17,6 +17,33 @@ async function run(query: string, page = 1): Promise<Raw> {
   return page === 1 ? (demoSearch(query) as Raw) : { total: 0, products: [] };
 }
 
+const DIM = /(?:\b\d+ )?\b\d+\/\d+\b|\b\d+\s?mm\b|\bdn ?\d+\b/gi;
+
+/** "skruetrækker sæt" -> "skruetrækkersæt" (sidste to ord lagt sammen), ellers null. */
+function joinedVariant(query: string): string | null {
+  const dims = query.match(DIM) || [];
+  const words = query.replace(DIM, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 3) return null;
+  const a = words[words.length - 2];
+  const b = words[words.length - 1];
+  if (!/^\p{L}{3,}$/u.test(a) || !/^\p{L}{3,}$/u.test(b)) return null;
+  return [...words.slice(0, -2), (a + b).toLowerCase(), ...dims].join(" ");
+}
+
+/** Hvor mange af de øverste 8 varer har alle søgningens ord i navnet. */
+function allWordsHits(query: string, products: Product[]): number {
+  const words = query
+    .toLowerCase()
+    .replace(DIM, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+  if (!words.length) return 0;
+  return products.slice(0, 8).filter((p) => {
+    const n = p.name.toLowerCase();
+    return words.every((w) => n.includes(w));
+  }).length;
+}
+
 function remember(key: string, value: SearchResult) {
   cache.set(key, { at: Date.now(), value });
   if (cache.size > 500) cache.delete(cache.keys().next().value as string);
@@ -32,8 +59,17 @@ export async function searchProducts(query: string): Promise<SearchResult> {
   if (hit && Date.now() - hit.at < TTL_MS) return { ...hit.value, ms: 0 };
 
   const t0 = Date.now();
-  let r = await run(query);
   let usedQuery = query;
+
+  // Danske sammensatte ord: "skruetrækker sæt" søges også som "skruetrækkersæt" (parallelt).
+  // Den variant, hvor flest af de øverste varer indeholder ALLE ordene i navnet, vinder.
+  const joined = joinedVariant(query);
+  const [r0, rj] = await Promise.all([run(query), joined ? run(joined).catch(() => null) : Promise.resolve(null)]);
+  let r = r0;
+  if (joined && rj && rj.total > 0 && allWordsHits(query, rj.products) > allWordsHits(query, r0.products)) {
+    r = rj;
+    usedQuery = joined;
+  }
 
   // Vælg den variant, hvor flest af de øverste produkter faktisk indeholder variantens
   // hovedord, så fx "vinkel stophane" ikke vinder med en masse vinkelfittings.

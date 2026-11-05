@@ -88,6 +88,9 @@ export function chatSettings(messages: ModelMessage[], effortOverride?: string) 
     tools,
     // Stop når forslagene er vist (sparer en ekstra AI-runde), ellers efter 5 trin.
     stopWhen: [hasToolCall("suggest_replies"), stepCountIs(5)],
+    // Modellen SKAL bruge et værktøj i hvert trin: søge eller svare via suggest_replies.
+    // Så kommer der aldrig et svar uden klikbare muligheder.
+    toolChoice: "required" as const,
     maxOutputTokens: 2500,
     providerOptions:
       provider === "openai"

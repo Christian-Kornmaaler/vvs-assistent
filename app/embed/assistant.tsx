@@ -18,6 +18,9 @@ const SUGGESTIONS = [
 ];
 
 
+/** Fjern markdown-tegn, hvis modellen alligevel bruger dem. */
+const clean = (t: string) => t.replace(/\*\*|__|`/g, "").replace(/^\s*[-*]\s+/gm, "• ");
+
 function close() {
   window.parent?.postMessage({ type: "vvs-assistent:close" }, "*");
 }
@@ -119,7 +122,7 @@ export default function Assistant() {
                   if (p.type === "text" && p.text.trim()) {
                     return (
                       <div key={i} className={m.role === "user" ? s.userBubble : s.botBubble}>
-                        {p.text}
+                        {clean(p.text)}
                       </div>
                     );
                   }
@@ -133,7 +136,7 @@ export default function Assistant() {
                     const isLast = m.id === messages.at(-1)?.id;
                     return (
                       <div key={i} className={s.replyGroup}>
-                        {inp.reply && !hasText && <div className={s.botBubble}>{inp.reply}</div>}
+                        {inp.reply && !hasText && <div className={s.botBubble}>{clean(inp.reply)}</div>}
                         {isLast && opts.length > 0 && p.state !== "input-streaming" && (
                           <div className={s.replyChips}>
                             {opts.map((o) => (

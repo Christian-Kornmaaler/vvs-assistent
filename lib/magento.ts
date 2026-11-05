@@ -141,6 +141,8 @@ function matchScorer(query: string) {
     for (const w of words) if (hay.includes(w)) score += 1;
     // Hovedordet (fx "stophane") skal stå i navnet; det vejer mest af ordene.
     if (head && norm(p.name).includes(head)) score += 3;
+    // Alle søgeordene i navnet (fx både "skruetrækker" og "sæt") = det præcise produkt.
+    if (words.length > 1 && words.every((w) => norm(p.name).includes(w))) score += 2;
     return score;
   };
 }
