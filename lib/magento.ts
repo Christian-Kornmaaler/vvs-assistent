@@ -36,7 +36,23 @@ async function mget<T>(path: string, timeoutMs = 4000): Promise<T> {
     signal: AbortSignal.timeout(timeoutMs),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Magento ${res.status} på ${path.split("?")[0]}`);
+  if (!res.ok) {
+    // Magentos egen fejltekst (fx manglende rettigheder) – aldrig selve tokenet.
+    let detail = "";
+    try {
+      const body = (await res.json()) as { message?: string; parameters?: Record<string, string> | string[] };
+      detail = body.message || "";
+      const params = body.parameters;
+      if (params && !Array.isArray(params)) {
+        for (const [k, v] of Object.entries(params)) detail = detail.replace(`%${k}`, String(v));
+      } else if (Array.isArray(params)) {
+        params.forEach((v, i) => (detail = detail.replace(`%${i + 1}`, String(v))));
+      }
+    } catch {
+      /* ikke JSON */
+    }
+    throw new Error(`Magento ${res.status} på ${path.split("?")[0]}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+  }
   return res.json() as Promise<T>;
 }
 
