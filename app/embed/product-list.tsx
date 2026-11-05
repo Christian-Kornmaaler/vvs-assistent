@@ -56,6 +56,9 @@ export default function ProductList({ result, dim }: { result: SearchResult; dim
     return () => io.disconnect();
   }, [loadMore, hasMore, failed]);
 
+  const inStock = products.filter((p) => p.inStock);
+  const ordered = products.filter((p) => !p.inStock);
+
   return (
     <>
       <div className={s.productsHead}>
@@ -65,7 +68,13 @@ export default function ProductList({ result, dim }: { result: SearchResult; dim
         {result.source === "demo" && <span className={s.demo}>Demo-data</span>}
       </div>
       <div className={s.productList} ref={listRef}>
-        {products.map((p) => (
+        {/* Alle lagervarer øverst – også når flere sider hentes ved scroll – derefter bestillingsvarer.
+            Rækkefølgen inden for hver gruppe er den, serveren har sorteret (relevans, pris). */}
+        {inStock.map((p) => (
+          <ProductCard key={p.sku} p={p} dim={dim} />
+        ))}
+        {ordered.length > 0 && inStock.length > 0 && <div className={s.groupLabel}>Bestillingsvarer</div>}
+        {ordered.map((p) => (
           <ProductCard key={p.sku} p={p} dim={dim} />
         ))}
         {products.length === 0 && (
