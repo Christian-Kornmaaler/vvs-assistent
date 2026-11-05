@@ -42,9 +42,9 @@ export function magentoInfo() {
   return { host, auth: useOAuth ? "oauth" : "bearer", store: cfg.store || "(standard)" };
 }
 
-// Hvor mange pladser et ikke-lagerført produkt rykkes ned i rangeringen.
-// Lagervarer prioriteres, men et meget præcist match på en bestillingsvare forsvinder ikke.
-const OUT_OF_STOCK_PENALTY = 8;
+// Når søgningen ikke indeholder genkendelige ord/dimensioner, regnes kun Magentos
+// øverste resultater som relevante, før der sorteres på lager og pris.
+const RELEVANT_TOP = 16;
 const CANDIDATES = 40;
 
 async function mget<T>(path: string, query: Record<string, string | number> = {}, timeoutMs = 4000): Promise<T> {
@@ -345,11 +345,20 @@ export async function magentoSearch(
   // Produkter der matcher kundens dimensioner og ord (i navn eller egenskaber) rykkes frem.
   const match = matchScorer(query);
   const scores = new Map(products.map((p) => [p.sku, match(p)]));
+  // Sortering (aftalt): blandt de relevante varer først lagervarer billigst øverst,
+  // derefter bestillingsvarer billigst øverst. Svage match (fx tilbehør) kommer bagefter,
+  // så en billig støvhætte ikke skubber selve produktet ned.
+  const best = Math.max(0, ...scores.values());
+  const tier = (p: Product & { rank: number }) =>
+    (scores.get(p.sku) || 0) >= best - 1 && (best > 0 || p.rank < RELEVANT_TOP) ? 0 : 1;
+  const price = (p: Product) => (p.price == null ? Number.POSITIVE_INFINITY : p.price);
   const sort = () =>
     products.sort(
       (a, b) =>
-        (scores.get(b.sku) || 0) - (scores.get(a.sku) || 0) ||
-        a.rank + (a.inStock ? 0 : OUT_OF_STOCK_PENALTY) - (b.rank + (b.inStock ? 0 : OUT_OF_STOCK_PENALTY)),
+        tier(a) - tier(b) ||
+        Number(b.inStock) - Number(a.inStock) ||
+        price(a) - price(b) ||
+        a.rank - b.rank,
     );
   sort();
 

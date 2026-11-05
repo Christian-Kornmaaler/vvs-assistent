@@ -194,7 +194,7 @@ export default function Assistant() {
                 </span>
               ) : latest ? (
                 <span>
-                  <b>{latest.total}</b> resultater · lagervarer først
+                  <b>{latest.total}</b> resultater · lagervarer først, billigst øverst
                 </span>
               ) : null}
               {latest?.source === "demo" && <span className={s.demo}>Demo-data</span>}
@@ -234,7 +234,10 @@ function ProductCard({ p, dim }: { p: Product; dim: boolean }) {
               ))}
           </div>
         ) : (
-          p.short && <div className={s.short}>{p.short}</div>
+          p.short &&
+          !p.short.toLowerCase().startsWith(p.name.toLowerCase().slice(0, 25)) && (
+            <div className={s.short}>{p.short}</div>
+          )
         )}
         <div className={s.meta}>
           {p.price != null && <span className={s.price}>{kr(p.price)}</span>}
