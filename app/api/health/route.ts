@@ -1,4 +1,4 @@
-import { debugAllowed } from "@/lib/debug";
+import { debugAllowed, debugConfigured } from "@/lib/debug";
 import { aiConfigured, getModel } from "@/lib/model";
 import { magentoConfigured, magentoInfo, magentoPing } from "@/lib/magento";
 
@@ -9,6 +9,7 @@ export async function GET(req: Request) {
   return Response.json(
     {
       ai: aiConfigured() ? { provider, model: id } : "mangler nøgle",
+      fejlsoegning: debugConfigured() ? "nøgle sat" : "ingen nøgle",
       produkter: magentoConfigured ? "magento" : "demo-data (MAGENTO_URL/MAGENTO_TOKEN mangler)",
       ...(magentoConfigured ? { magento: magentoInfo() } : {}),
       ...(ping && magentoConfigured ? { forbindelse: await magentoPing() } : {}),
