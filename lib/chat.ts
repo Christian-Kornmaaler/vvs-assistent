@@ -21,7 +21,13 @@ export const tools = {
     },
     // Modellen får en kompakt tekstudgave (hurtigere og billigere); UI'et får de fulde data.
     toModelOutput: ({ output }) => {
-      if ("error" in output && output.error) return { type: "text", value: `Søgefejl: ${output.error}` };
+      // Tekniske detaljer logges på serveren, men gives aldrig videre til kunden.
+      if ("error" in output && output.error)
+        return {
+          type: "text",
+          value:
+            "Søgningen virkede ikke lige nu (midlertidig fejl). Prøv søgningen én gang til; virker den stadig ikke, så bed kunden prøve igen om lidt eller bruge shoppens søgefelt. Nævn ingen tekniske detaljer.",
+        };
       if (output.products.length === 0) return { type: "text", value: `Ingen resultater for "${output.query}".` };
       const lines = output.products.map((p, i) => {
         const specs = (p.specs || [])

@@ -122,7 +122,9 @@ export default function Assistant() {
                         <SearchIcon />
                         <span>
                           {done ? "Søgte efter" : "Søger efter"} <b>{q || "…"}</b>
-                          {done && p.output ? ` · ${(p.output as SearchResult).total} fundet` : ""}
+                          {done && p.output && !("error" in (p.output as object))
+                            ? ` · ${(p.output as SearchResult).total} fundet`
+                            : ""}
                         </span>
                       </div>
                     );
