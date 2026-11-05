@@ -1,5 +1,5 @@
 import { oauthHeader, percentEncode } from "./oauth";
-import { headWord } from "./query-variants";
+import { headWord, stem } from "./query-variants";
 import { DELIVERY_ATTRIBUTE, isJunkValue, SPEC_ATTRIBUTES, STOCK_DELIVERY, TEXT_ATTRIBUTES } from "./specs";
 import type { Product, Spec } from "./types";
 
@@ -139,11 +139,12 @@ function matchScorer(query: string) {
       // Har produktet en anden tomme-dimension og ingen af de søgte, er det sandsynligvis forkert.
       score += hits * 3 - (hits === 0 && /\b\d+\/\d+\b/.test(hay) ? 2 : 0);
     }
-    for (const w of words) if (hay.includes(w)) score += 1;
+    // Ord sammenlignes på stammen, så ental og flertal vægtes lige højt ("handske" ~ "handsker").
+    for (const w of words) if (hay.includes(stem(w))) score += 1;
     // Hovedordet (fx "stophane") skal stå i navnet; det vejer mest af ordene.
-    if (head && norm(p.name).includes(head)) score += 3;
+    if (head && norm(p.name).includes(stem(head))) score += 3;
     // Alle søgeordene i navnet (fx både "skruetrækker" og "sæt") = det præcise produkt.
-    if (words.length > 1 && words.every((w) => norm(p.name).includes(w))) score += 2;
+    if (words.length > 1 && words.every((w) => norm(p.name).includes(stem(w)))) score += 2;
     // Tilbehør: "afdækning FOR stikkontakt", "spændehætte FOR kuglehane", "forskruningssæt TIL
     // brusearmatur". Står hovedordet kun efter "for/til", er varen tilbehør til det, kunden søger,
     // ikke selve varen – medmindre kunden selv søger på tilbehør.
@@ -153,7 +154,7 @@ function matchScorer(query: string) {
       if (m && m.index !== undefined) {
         const before = n.slice(0, m.index);
         const after = n.slice(m.index);
-        if (!before.includes(head) && after.includes(head)) score -= 5;
+        if (!before.includes(stem(head)) && after.includes(stem(head))) score -= 5;
       }
     }
     return score;

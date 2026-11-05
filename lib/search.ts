@@ -1,6 +1,6 @@
 import { demoSearch } from "./demo-catalog";
 import { magentoConfigured, magentoSearch, PAGE_SIZE } from "./magento";
-import { headWord, queryVariants } from "./query-variants";
+import { headWord, numberVariants, queryVariants, stem } from "./query-variants";
 import type { Product, SearchResult } from "./types";
 
 // Kort cache i hukommelsen: samme søgning inden for 2 minutter svares med det samme.
@@ -38,9 +38,11 @@ function allWordsHits(query: string, products: Product[]): number {
     .split(/\s+/)
     .filter((w) => w.length >= 3);
   if (!words.length) return 0;
+  // Ental/flertal tæller ens: sammenlign på ordstammen ("handsker" ~ "handske").
+  const stems = words.map(stem);
   return products.slice(0, 8).filter((p) => {
     const n = p.name.toLowerCase();
-    return words.every((w) => n.includes(w));
+    return stems.every((w) => n.includes(w));
   }).length;
 }
 
@@ -61,15 +63,26 @@ export async function searchProducts(query: string): Promise<SearchResult> {
   const t0 = Date.now();
   let usedQuery = query;
 
-  // Danske sammensatte ord: "skruetrækker sæt" søges også som "skruetrækkersæt" (parallelt).
-  // Den variant, hvor flest af de øverste varer indeholder ALLE ordene i navnet, vinder.
-  const joined = joinedVariant(query);
-  const [r0, rj] = await Promise.all([run(query), joined ? run(joined).catch(() => null) : Promise.resolve(null)]);
+  // Varianter der søges parallelt med kundens ord (ingen ekstra ventetid):
+  //  - sammensatte ord: "skruetrækker sæt" -> "skruetrækkersæt"
+  //  - ental/flertal: "handske" <-> "handsker" (Magento matcher kun hele ord)
+  // Den variant, hvor flest af de øverste varer indeholder ALLE ordene (på ordstammen), vinder.
+  const extra = [joinedVariant(query), ...numberVariants(query)].filter(
+    (v, i, a): v is string => !!v && v.toLowerCase() !== query.toLowerCase() && a.indexOf(v) === i,
+  );
+  const [r0, ...rx] = await Promise.all([run(query), ...extra.map((v) => run(v).catch(() => null))]);
   let r = r0;
-  if (joined && rj && rj.total > 0 && allWordsHits(query, rj.products) > allWordsHits(query, r0.products)) {
-    r = rj;
-    usedQuery = joined;
-  }
+  let bestHits = allWordsHits(query, r0.products);
+  rx.forEach((x, i) => {
+    if (!x || x.total === 0) return;
+    const hits = allWordsHits(query, x.products);
+    // Lige mange præcise varer: vælg den form, der giver flest resultater i alt (mere at scrolle i).
+    if (hits > bestHits || (r.total === 0 && x.total > 0) || (hits === bestHits && x.total > r.total * 2)) {
+      r = x;
+      bestHits = hits;
+      usedQuery = extra[i];
+    }
+  });
 
   // Vælg den variant, hvor flest af de øverste produkter faktisk indeholder variantens
   // hovedord, så fx "vinkel stophane" ikke vinder med en masse vinkelfittings.

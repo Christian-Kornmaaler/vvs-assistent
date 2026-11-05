@@ -34,6 +34,66 @@ function splitCompound(word: string): string[] | null {
   return null;
 }
 
+/**
+ * Ordstamme til sammenligning af ental/flertal: "handsker", "handske" og
+ * "arbejdshandsker" deler stammen "handsk"; "ventiler"/"ventil" -> "ventil".
+ */
+export function stem(word: string): string {
+  const w = word.toLowerCase();
+  if (w.length <= 4) return w;
+  // Første endelse, der efterlader mindst 4 tegn: handsker/handske -> handsk, haner/hane -> hane, ventiler -> ventil
+  for (const suf of ["erne", "ene", "er", "e", "r"]) {
+    if (w.endsWith(suf) && w.length - suf.length >= 4) return w.slice(0, -suf.length);
+  }
+  return w;
+}
+
+const INVARIANT = /(?:sæt|rør|s|x|o)$/; // samme form i ental og flertal, eller engelske/udenlandske ord
+
+/**
+ * Den anden tal-form af søgningens ord (ental <-> flertal), så "handske" også søges
+ * som "handsker" og omvendt. Dansk har to flertalsendelser (handske-r, ventil-er),
+ * så flertal -> ental giver op til to varianter; resultaterne afgør, hvilken der passer.
+ */
+export function numberVariants(query: string): string[] {
+  // Kun produktets hovedord bøjes ("nitril handsker" -> "nitril handske", ikke "nitriler").
+  const head = headWord(query);
+  const words = query.split(/(\s+)/);
+  const a: string[] = [];
+  const b: string[] = [];
+  let changed = false;
+  let twoWays = false;
+  for (const w of words) {
+    const l = w.toLowerCase();
+    if (!/^\p{L}{4,}$/u.test(w) || INVARIANT.test(l) || (head && !stem(l).startsWith(stem(head)) && !stem(head).startsWith(stem(l)))) {
+      a.push(w);
+      b.push(w);
+      continue;
+    }
+    if (l.endsWith("er") && l.length >= 5) {
+      // handsker -> handske / ventiler -> ventil
+      a.push(l.slice(0, -1));
+      b.push(l.length - 2 >= 4 ? l.slice(0, -2) : l.slice(0, -1));
+      twoWays = true;
+    } else if (l.endsWith("e")) {
+      a.push(l + "r"); // handske -> handsker, hane -> haner
+      b.push(l + "r");
+    } else if (/[^aeiouyæøå]$/.test(l)) {
+      a.push(l + "er"); // ventil -> ventiler, kontakt -> kontakter
+      b.push(l + "er");
+    } else {
+      a.push(w);
+      b.push(w);
+      continue;
+    }
+    changed = true;
+  }
+  if (!changed) return [];
+  const va = a.join("");
+  const vb = b.join("");
+  return twoWays && vb !== va ? [va, vb] : [va];
+}
+
 /** Søgningens hovedord (det vigtigste navneord), fx "stophane" i "vinkelstophane 1/2". */
 export function headWord(query: string): string | null {
   const words = query.replace(DIM_RE, " ").split(/\s+/).filter(Boolean);
