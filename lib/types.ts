@@ -22,4 +22,5 @@ export type SearchResult = {
   source: "magento" | "demo";
   /** Tid pr. trin i Magento (ms), kun til fejlsøgning */
   timings?: { search: number; products: number; salable: number };
+  debug?: Record<string, unknown>;
 };

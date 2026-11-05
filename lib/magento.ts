@@ -93,11 +93,11 @@ async function mget<T>(path: string, query: Record<string, string | number> = {}
   return res.json() as Promise<T>;
 }
 
-/** Forbindelsestest uden søgning: henter butikkens websites (samme kald som kundeservice-appens test). */
+/** Forbindelsestest uden søgning: henter ét varenummer (kræver kun produktrettigheder). */
 export async function magentoPing(): Promise<{ ok: boolean; ms: number; error?: string }> {
   const t = Date.now();
   try {
-    await mget<unknown>("/store/websites");
+    await mget<unknown>("/products", { "searchCriteria[pageSize]": 1, fields: "items[sku]" });
     return { ok: true, ms: Date.now() - t };
   } catch (e) {
     return { ok: false, ms: Date.now() - t, error: (e as Error).message };
@@ -136,7 +136,7 @@ export type Timings = { search: number; products: number; salable: number };
 
 export async function magentoSearch(
   query: string,
-): Promise<{ total: number; products: Product[]; timings: Timings }> {
+): Promise<{ total: number; products: Product[]; timings: Timings; debug?: Record<string, unknown> }> {
   const timings: Timings = { search: 0, products: 0, salable: 0 };
   let t = Date.now();
   const lap = (k: keyof Timings) => {
@@ -199,6 +199,14 @@ export async function magentoSearch(
     );
   sort();
 
+  // Fejlsøgningsinfo (vises kun i /api/search, aldrig til modellen)
+  const first = list.items?.[0];
+  const debug: Record<string, unknown> = {
+    stockItemFields: first?.extension_attributes ? Object.keys(first.extension_attributes) : [],
+    firstStockItem: first?.extension_attributes?.stock_item ?? null,
+    salableErrors: [] as string[],
+  };
+
   // 3. Bekræft MSI salable qty for de øverste (tager reservationer med). Falder tilbage på lagerfeltet ved timeout.
   await Promise.all(
     products.slice(0, VERIFY_TOP).map(async (p) => {
@@ -212,8 +220,10 @@ export async function magentoSearch(
           p.qty = qty;
           p.inStock = qty > 0;
         }
-      } catch {
-        /* behold værdien fra stock_item */
+      } catch (e) {
+        // behold værdien fra stock_item
+        const errs = debug.salableErrors as string[];
+        if (errs.length < 3) errs.push(`${p.sku}: ${(e as Error).message}`);
       }
     }),
   );
@@ -224,5 +234,6 @@ export async function magentoSearch(
     total: search.total_count ?? ids.length,
     products: products.map(({ rank: _rank, ...p }) => p),
     timings,
+    debug,
   };
 }
